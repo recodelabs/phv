@@ -121,10 +121,10 @@ The synthetic lines were very similar, so real data will compress less well.
 
 ## Resource IDs
 
-An ID is the first 32 hex characters of the SHA-256 of the canonical resource with `id` and volatile `meta` fields removed, prefixed with the resource type before hashing. A reference to another resource in the same submission is hashed as that resource's own derived ID, repeated until the IDs stop changing or for as many rounds as there are resources, which bounds circular references. So an ID does not depend on temporary names chosen by the mapper, and two reports that differ only in which results they point to stay separate.
+An ID is the first 32 hex characters of the SHA-256 of the canonical resource with `id` and volatile `meta` fields removed, prefixed with the resource type before hashing. A reference to another resource in the same submission is hashed as that resource's own derived ID, working up from resources that reference nothing else in the submission. A reference that can't be resolved this way, because it is in or leads to a circular reference, is hashed as a fixed `Type/#` token. So an ID does not depend on temporary names, entry order or submission size, and two reports that differ only in which results they point to stay separate.
 
 - Adding the same content twice gives the same ID and changes nothing.
-- Two truly identical resources in one submission collapse into one. If two different resources ever end up with one ID, the submission is rejected, so nothing is lost silently.
+- Two truly identical resources in one submission collapse into one. If two different resources end up with one ID, which can happen when they differ only in a circular reference, the submission is rejected, so nothing is lost silently.
 - A resource keeps its ID when replaced.
 - Adding content that matches a stored ID but differs from the stored record is a conflict, not `unchanged`. This happens when the record has been replaced. `Provenance` is the exception, because a repeated add gives the same ID with a later time.
 - Known limit: after a replace, adding the new content creates a second record, because its hash gives a new ID. Correct records with `phv replace` until stable IDs arrive in sub-project 5.
@@ -134,10 +134,10 @@ An ID is the first 32 hex characters of the SHA-256 of the canonical resource wi
 
 AI skills and other callers submit FHIR JSON. phv treats it as untrusted.
 
-1. **Parse** one resource or a Bundle of type `transaction` or `collection`. Only `entry.resource` and `entry.fullUrl` are read from a Bundle. JSON with a repeated key in any object is rejected, because a parser would otherwise silently keep the last value.
+1. **Parse** one resource or a Bundle of type `transaction` or `collection`. Only `entry.resource` and `entry.fullUrl` are read from a Bundle. JSON with a repeated key in any object is rejected, because a parser would otherwise silently keep the last value. A Bundle with no entries, a Bundle inside a Bundle, and two entries sharing a local name are rejected too.
 2. **Assign IDs** and rewrite references to `urn:uuid:` full URLs and temporary IDs within the submission.
 3. **Validate** every resource, as described below. Any error rejects the whole submission and writes nothing.
-4. **Check references.** A relative `Type/id` reference must resolve in the submission or the vault. Absolute URLs and `#contained` references are left alone. A vault holds at most one `Patient`.
+4. **Check references.** A relative `Type/id` reference must resolve in the submission or the vault. A `urn:` reference left over after rewriting can never resolve, so it is rejected. Other absolute URLs and `#contained` references are left alone. A vault holds at most one `Patient`.
 5. **Add Provenance** when a source is given, as described below.
 6. **Write** under the lock. Each affected file is written to a temporary file in the same directory, flushed, then renamed over the original.
 
@@ -163,7 +163,11 @@ Findings from a spike on 2026-11-06 with `octofhir-fhirschema` 0.3.37 and `octof
 
 - **Required bindings:** the validator skips them unless it has a terminology service, and silently skips value sets the service does not know. A build script generates `data/required-valuesets.json` from `hl7.fhir.r4.core` for bindings that can be fully enumerated, keyed by URL with the `|4.0.1` suffix. A test lists required bindings that are not covered, so the gaps are visible.
 - **Choice types:** the validator accepts `valueQuantity` and `valueString` together, so phv checks this itself.
-- **False `tim-5` failure:** `Timing.repeat` without `period` fails with a FHIRPath type error. phv reports constraint results that contain `evaluation failed` as warnings and writes the resource. This logic lives in one function with a test, so it can be removed when the upstream bug is fixed. Constraints that evaluate to false remain errors.
+- **False `tim-4` and `tim-5` failures:** `Timing.repeat` with a unit but no `duration` or `period` fails with a FHIRPath type error. phv reports evaluation failures on these two constraints only as warnings and writes the resource. Any other evaluation failure stays an error, so a new engine problem surfaces rather than being hidden. This lives in one function with a test, so it can be removed when the upstream bug is fixed.
+- **Multiple codings:** the validator checks every coding in a `CodeableConcept` against a required binding, while FHIR needs only one to match. This wrongly rejects a hospital `Condition.clinicalStatus` that also has a SNOMED coding, so phv drops those errors when a sibling coding matches.
+- **Contained resources and extensions:** the validator skips them, including a contained resource with no required fields. phv validates contained resources itself and walks extensions for the `value[x]` check.
+- **Abstract types:** `Resource` and `DomainResource` pass as resource types, so phv rejects them.
+- **Unenforced rules:** the validator does not evaluate some rules on data types, including `per-1` (a `Period` that ends before it starts), `rng-2`, `qty-3` and `ext-1`. A test pins this so a fix upstream is noticed, and the README lists it. The person's confirmation is the only check on these for now.
 - **`id` format:** the validator does not enforce it, so phv does.
 - **Unknown profiles and extensions:** the validator accepts them, including US Core, so real hospital records store as they are. It also accepts an unknown `modifierExtension`, which can change what a record means, so phv warns about it.
 
@@ -316,6 +320,8 @@ These came from reviewing the design against the HealthKit export app in `health
 - **What goes where:** clinical records belong in `records/`. Daily rollups and raw samples outside `records/` apply to wearables.
 - **Submissions:** submit one source at a time, because FHIR IDs are only unique per type and source. Validate each record and write the good ones, because one bad record rejects a whole submission.
 - **References:** point `Patient` references at the vault's Patient, and stop if there is none. Keep references between records in the file. Make other relative references absolute using `sourceURL`, since HealthKit has no Practitioner, Encounter, Organization or Medication resources.
-- **Other record rules:** skip and report DSTU2 records, which stay in `sources/`. Set an identifier (source, type, original ID) and `meta.source`.
+- **Other record rules:** skip and report DSTU2 records, which stay in `sources/`. Identify the version from `fhirVersion` on the export line, not by inspecting fields. Set an identifier (source, type, original ID) and `meta.source`.
 - **Activity:** one Observation per day for steps, probably LOINC 41950-7 (confirm the code), keyed on date. Workouts as Observation, keyed on the HealthKit UUID, which is a judgment call to confirm.
 - **Tests:** cover Coverage, MedicationRequest, MedicationDispense and Procedure.
+- **Seen so far:** Apple's simulator sample records are all DSTU2, so a fixture needs R4 records too, and no R4 from HealthKit has been seen yet. `sourceURL` looks like `<base>/<Type>/<id>` but may be null. All references are relative, to Patient, Encounter and Practitioner resources that are not in the export. Real hospital records are untested.
+- **File checks:** the last line of an export file is `kind: "summary"`, and a file without it was cut off, so the importer must refuse it. A repeat export can be byte-identical, which triggers the duplicate source warning.
