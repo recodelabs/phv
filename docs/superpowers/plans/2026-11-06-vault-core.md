@@ -1526,6 +1526,40 @@ async fn real_timing_failures_are_still_errors() {
 }
 
 #[tokio::test]
+async fn hospital_records_with_unknown_profiles_and_extensions_are_accepted() {
+    let patient = json!({"resourceType":"Patient",
+        "meta":{"profile":["http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient|6.1.0"]},
+        "extension":[{"url":"http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+            "extension":[{"url":"text","valueString":"Example"}]}],
+        "name":[{"family":"Example"}],"birthDate":"1980-01-01"});
+    assert_eq!(errors(&patient).await, Vec::<String>::new());
+
+    let mut r = lab();
+    r["meta"] = json!({"profile":["http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab"]});
+    r["extension"] = json!([{"url":"http://example.org/fhir/unknown","valueString":"x"}]);
+    r["code"]["extension"] = json!([{"url":"http://example.org/fhir/nested","valueCode":"a"}]);
+    r["_status"] = json!({"extension":[{"url":"http://example.org/fhir/primitive","valueString":"x"}]});
+    assert_eq!(errors(&r).await, Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn a_modifier_extension_is_a_warning_at_any_depth() {
+    // It can change what a record means, and phv cannot interpret it.
+    let mut r = lab();
+    r["modifierExtension"] = json!([{"url":"http://example.org/fhir/mod","valueBoolean":true}]);
+    let issues = Validator::new().await.unwrap().validate(&r).await;
+    assert!(issues.iter().any(|i| i.code == "PHV-MODIFIER" && i.severity == Severity::Warning), "{issues:?}");
+
+    let mut nested = lab();
+    nested["component"] = json!([{"code":{"text":"x"},"modifierExtension":[{"url":"http://example.org/fhir/mod","valueBoolean":true}]}]);
+    let issues = Validator::new().await.unwrap().validate(&nested).await;
+    assert!(issues.iter().any(|i| i.code == "PHV-MODIFIER"), "{issues:?}");
+
+    let clean = Validator::new().await.unwrap().validate(&lab()).await;
+    assert!(clean.iter().all(|i| i.code != "PHV-MODIFIER"), "{clean:?}");
+}
+
+#[tokio::test]
 async fn results_are_in_a_stable_order() {
     let mut r = lab();
     r["foo"] = json!(1);
@@ -1635,6 +1669,13 @@ impl Validator {
         if let Some(elements) = &schema.elements {
             check_choices(resource, elements, resource_type, &mut issues);
         }
+        if has_modifier_extension(resource) {
+            issues.push(Issue::warning(
+                "PHV-MODIFIER",
+                resource_type,
+                "this record has a modifierExtension, which can change what it means and which phv cannot interpret",
+            ));
+        }
 
         issues.sort_by(|a, b| (&a.path, &a.code, &a.message).cmp(&(&b.path, &b.code, &b.message)));
         issues.dedup();
@@ -1656,6 +1697,14 @@ fn from_error(error: &ValidationError) -> Issue {
         Issue::warning(&error.error_type, path, message)
     } else {
         Issue::error(&error.error_type, path, message)
+    }
+}
+
+fn has_modifier_extension(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, child)| key == "modifierExtension" || has_modifier_extension(child)),
+        Value::Array(items) => items.iter().any(has_modifier_extension),
+        _ => false,
     }
 }
 
@@ -1971,6 +2020,32 @@ async fn replace_keeps_the_id_and_changes_one_line() {
 }
 
 #[tokio::test]
+async fn re_adding_content_that_was_replaced_is_a_conflict_not_unchanged() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let reference = phv.add(&lab(&patient, "1.50"), &AddOptions::default()).await.unwrap().created[0].clone();
+    let id = reference.split_once('/').unwrap().1;
+    phv.replace("Observation", id, &lab(&patient, "1.75"), false).await.unwrap();
+    let before = records(&phv, "Observation");
+
+    let err = phv.add(&lab(&patient, "1.50"), &AddOptions::default()).await.unwrap_err();
+    assert!(err.issues().iter().any(|i| i.code == "PHV-REPLACED"), "{err:?}");
+    assert_eq!(records(&phv, "Observation"), before);
+}
+
+#[tokio::test]
+async fn known_limit_re_adding_the_new_content_creates_a_second_record() {
+    // Stable IDs in the importer work will address this. Until then, correct records with replace only.
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let reference = phv.add(&lab(&patient, "1.50"), &AddOptions::default()).await.unwrap().created[0].clone();
+    let id = reference.split_once('/').unwrap().1;
+    phv.replace("Observation", id, &lab(&patient, "1.75"), false).await.unwrap();
+    phv.add(&lab(&patient, "1.75"), &AddOptions::default()).await.unwrap();
+    assert_eq!(records(&phv, "Observation").lines().count(), 2);
+}
+
+#[tokio::test]
 async fn replace_refuses_a_missing_resource_or_a_different_type() {
     let (_d, phv) = phv().await;
     let patient = add_patient(&phv).await;
@@ -2161,17 +2236,29 @@ impl Phv {
 
         let mut report = WriteReport { warnings, dry_run: options.dry_run, ..WriteReport::default() };
         let mut changes = Vec::new();
+        let mut conflicts = Vec::new();
         for resource in &resources {
             let reference = resource_ref(resource);
             let resource_type = resource["resourceType"].as_str().unwrap_or("").to_string();
             let id = resource["id"].as_str().unwrap_or("").to_string();
-            // An ID comes from the content, so an existing ID means this is already stored.
-            if self.vault.get(&resource_type, &id)?.is_some() {
-                report.unchanged.push(reference);
-            } else {
-                report.created.push(reference);
-                changes.push(Change::Upsert { resource_type, id, line: canon_resource(resource) });
+            let line = canon_resource(resource);
+            match self.vault.get(&resource_type, &id)? {
+                None => {
+                    report.created.push(reference);
+                    changes.push(Change::Upsert { resource_type, id, line });
+                }
+                // A repeated add gives the same Provenance ID with a later time. That is not a change.
+                Some(stored) if stored == line || resource_type == "Provenance" => report.unchanged.push(reference),
+                // The ID comes from this content, but the stored record differs, so it was replaced.
+                Some(_) => conflicts.push(Issue::error(
+                    "PHV-REPLACED",
+                    &reference,
+                    "the stored record was changed by phv replace and differs from this content: use phv replace to change it again",
+                )),
             }
+        }
+        if !conflicts.is_empty() {
+            return Err(PhvError::Conflict(conflicts));
         }
         if !options.dry_run {
             self.vault.apply(&changes)?;
@@ -2258,7 +2345,7 @@ pub(crate) fn build_provenance(_vault: &Vault, _sha256: &str, _targets: &[String
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cargo test --test write`
-Expected: 13 tests PASS. If the validator returns warnings for valid fixtures, inspect them rather than ignoring them.
+Expected: 15 tests PASS. If the validator returns warnings for valid fixtures, inspect them rather than ignoring them.
 
 - [ ] **Step 6: Commit**
 
@@ -2313,6 +2400,13 @@ async fn source_add_stores_the_file_and_a_document_reference() {
     assert!(line.contains(r#""status":"current""#), "{line}");
     assert!(line.contains(r#""system":"urn:phv:sha256""#), "{line}");
     assert!(line.contains(r#""reference":"Patient/"#), "{line}");
+}
+
+#[tokio::test]
+async fn an_ndjson_source_gets_its_own_content_type() {
+    let (_d, phv) = phv().await;
+    phv.source_add("health-export.ndjson", b"{}\n").await.unwrap();
+    assert!(records(&phv, "DocumentReference").contains(r#""contentType":"application/x-ndjson""#));
 }
 
 #[tokio::test]
@@ -2431,6 +2525,7 @@ fn content_type(ext: &str) -> &'static str {
         "txt" => "text/plain",
         "csv" => "text/csv",
         "json" => "application/json",
+        "ndjson" => "application/x-ndjson",
         "xml" => "application/xml",
         _ => "application/octet-stream",
     }
@@ -2525,7 +2620,7 @@ In `docs/superpowers/specs/2026-11-06-vault-core-design.md`, under "Sources and 
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cargo test --test source`
-Expected: 6 tests PASS. `path_parts_in_a_file_name_cannot_escape_sources` relies on `check`, which is a stub until Task 10.
+Expected: 7 tests PASS. `path_parts_in_a_file_name_cannot_escape_sources` relies on `check`, which is a stub until Task 10.
 
 - [ ] **Step 6: Commit**
 

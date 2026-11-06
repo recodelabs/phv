@@ -124,6 +124,8 @@ An ID is the first 32 hex characters of the SHA-256 of the canonical resource wi
 - Adding the same content twice gives the same ID and changes nothing.
 - Two identical resources in one submission collapse into one.
 - A resource keeps its ID when replaced.
+- Adding content that matches a stored ID but differs from the stored record is a conflict, not `unchanged`. This happens when the record has been replaced. `Provenance` is the exception, because a repeated add gives the same ID with a later time.
+- Known limit: after a replace, adding the new content creates a second record, because its hash gives a new ID. Correct records with `phv replace` until stable IDs arrive in sub-project 5.
 - An `id` in a submitted resource is only a temporary name within that submission.
 
 ## Write path
@@ -152,6 +154,7 @@ The checks, in order:
 | Required code bindings | `InMemoryTerminologyService` loaded from generated data |
 | One `value[x]` choice per element | phv, walking the schema's `choices` |
 | `id` format | phv |
+| `modifierExtension` present, reported as a warning | phv |
 | Local references resolve | phv |
 
 Findings from a spike on 2026-11-06 with `octofhir-fhirschema` 0.3.37 and `octofhir-fhirpath` 0.5.8 shape this design:
@@ -160,6 +163,7 @@ Findings from a spike on 2026-11-06 with `octofhir-fhirschema` 0.3.37 and `octof
 - **Choice types:** the validator accepts `valueQuantity` and `valueString` together, so phv checks this itself.
 - **False `tim-5` failure:** `Timing.repeat` without `period` fails with a FHIRPath type error. phv reports constraint results that contain `evaluation failed` as warnings and writes the resource. This logic lives in one function with a test, so it can be removed when the upstream bug is fixed. Constraints that evaluate to false remain errors.
 - **`id` format:** the validator does not enforce it, so phv does.
+- **Unknown profiles and extensions:** the validator accepts them, including US Core, so real hospital records store as they are. It also accepts an unknown `modifierExtension`, which can change what a record means, so phv warns about it.
 
 Dependencies are pinned to exact versions (`=0.3.37`, `=0.5.8`), and `Cargo.lock` is committed, because these crates change often. The project needs Rust 1.98 or newer, and `rust-toolchain.toml` pins the tested 1.99.1.
 
@@ -212,7 +216,7 @@ phv serve [--port N]
 
 `phv rm` refuses to remove a resource that another resource references. In a vault with Git, removing a line does not remove it from history; deleting it fully needs a history rewrite by the person.
 
-`phv check` validates every line, and checks line order, ID uniqueness, dangling references and that every `DocumentReference` has its source file. It reports problems and changes nothing. After a manual Git merge, this is the way to confirm the vault is sound. A write refuses to touch a file that is out of order and points to `phv check`, rather than quietly rewriting it.
+`phv check` validates every line, and checks line order, ID uniqueness, dangling references and that any attachment URL under `sources/` points to a file that exists. A `DocumentReference` with no file in `sources/`, such as a clinical note from another system, is fine. It reports problems and changes nothing. After a manual Git merge, this is the way to confirm the vault is sound. A write refuses to touch a file that is out of order and points to `phv check`, rather than quietly rewriting it.
 
 `--json` gives machine-readable output on every command. Exit codes follow fhir-pipes: 0 for success, 1 when validation or `phv check` finds problems or a runtime failure occurs, and 2 for an error that can be fixed before retrying, such as a bad flag, malformed JSON or a missing vault.
 
@@ -286,5 +290,17 @@ Each gets its own spec and plan.
 2. **Document ingestion:** more AI skills that map photos, visit notes and receipts to FHIR JSON and submit it through `phv add`.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus scoped AI access through MCP.
 4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
-5. **Importers:** HealthKit, Strava and others as plain code, storing daily rollups as resources and raw samples outside `records/`.
+5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
 6. **Warehouse and dashboard:** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload.
+
+### Notes for the importer sub-project
+
+These came from reviewing the design against the HealthKit export app in `health-extractor`. Check them against a real export first, since none has been seen yet.
+
+- **Stable IDs:** add an optional `--key-system SYSTEM`. When a resource has an `identifier` in that system, its ID comes from the type, system and value, not its content, and `add` updates it in place, with Provenance. This suits amended lab results and step totals that change when a Watch syncs late. It needs no migration, since it only affects new imports.
+- **What goes where:** clinical records belong in `records/`. Daily rollups and raw samples outside `records/` apply to wearables.
+- **Submissions:** submit one source at a time, because FHIR IDs are only unique per type and source. Validate each record and write the good ones, because one bad record rejects a whole submission.
+- **References:** point `Patient` references at the vault's Patient, and stop if there is none. Keep references between records in the file. Make other relative references absolute using `sourceURL`, since HealthKit has no Practitioner, Encounter, Organization or Medication resources.
+- **Other record rules:** skip and report DSTU2 records, which stay in `sources/`. Set an identifier (source, type, original ID) and `meta.source`.
+- **Activity:** one Observation per day for steps, probably LOINC 41950-7 (confirm the code), keyed on date. Workouts as Observation, keyed on the HealthKit UUID, which is a judgment call to confirm.
+- **Tests:** cover Coverage, MedicationRequest, MedicationDispense and Procedure.
