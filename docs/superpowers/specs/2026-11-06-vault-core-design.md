@@ -18,7 +18,8 @@ phv (personal health vault) keeps one person's health records as FHIR R4 files o
 | Health memory (mood, sleep, diet) and AI access through MCP | Sub-project 3 |
 | IPS and narrative summaries, IPS profile validation | Sub-project 4 |
 | HealthKit, Strava and other importers | Sub-project 5 |
-| Parquet warehouse through fhir-pipes-rs, web dashboard, browser upload | Sub-project 6 |
+| Web browser for records | Sub-project 6, see `2026-11-06-fhir-browser-design.md` |
+| Parquet warehouse through fhir-pipes-rs, analytics | Sub-project 6, later |
 | Hosted or remote access | Deferred, laptop only |
 | Encryption at rest, Git LFS | Deferred, see Security |
 | More than one person in a vault | Not planned, use one vault per person |
@@ -191,7 +192,7 @@ Reads load the NDJSON file for a resource type from the working tree. There is n
 
 Filtering uses FHIRPath expressions from `--where` or the `where` query parameter, evaluated against each resource and treated as true if the result is `true`.
 
-Dashboard and analytics queries belong to the warehouse in sub-project 6. For a vault with Git, it is built from the last commit so unreviewed changes stay out.
+Analytics queries belong to the warehouse in sub-project 6. For a vault with Git, it is built from the last commit so unreviewed changes stay out. The FHIR browser has no warehouse and reads the working files, so it shows uncommitted records.
 
 ## Interfaces
 
@@ -305,7 +306,7 @@ Each gets its own spec and plan.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus scoped AI access through MCP.
 4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
-6. **Warehouse and dashboard:** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload.
+6. **Browser and warehouse:** first a read-only FHIR browser, designed in `2026-11-06-fhir-browser-design.md`, with no web input. Later, a Parquet warehouse built with `fhir-pipes refresh` from the last commit, for analytics.
 
 ### Notes for the importer sub-project
 
