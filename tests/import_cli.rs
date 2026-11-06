@@ -92,3 +92,34 @@ async fn a_missing_file_exits_2() {
     let missing = phv_import(&vault, &dir.path().join("nope.ndjson"), &[]);
     assert_eq!(missing.status.code(), Some(2), "{missing:?}");
 }
+
+#[tokio::test]
+async fn an_older_export_is_held_and_reported_without_failing() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = dir.path().join("vault");
+    vault_with_patient(&vault).await;
+    let file = dir.path().join("activity.ndjson");
+    let newer = SUMMARY.replace("2026-01-31", "2026-02-10");
+    std::fs::write(&file, format!("{DAY}\n{newer}\n")).unwrap();
+    assert_eq!(phv_import(&vault, &file, &[]).status.code(), Some(0));
+    let stored = std::fs::read_to_string(vault.join("records/Observation.ndjson")).unwrap();
+
+    let older_day = DAY.replace("5000", "6123");
+    std::fs::write(&file, format!("{older_day}\n{SUMMARY}\n")).unwrap();
+    let text = phv_import(&vault, &file, &[]);
+    assert_eq!(text.status.code(), Some(0), "{text:?}");
+    let out = stdout(&text);
+    assert!(
+        out.contains("Kept 1") && out.contains("2026-02-10"),
+        "{out}"
+    );
+    assert!(out.contains("wrote 0"), "{out}");
+
+    let json = phv_import(&vault, &file, &["--json"]);
+    let report: Value = serde_json::from_str(&stdout(&json)).unwrap();
+    assert_eq!(report["older_export"][0]["key"], "2026-01-01");
+    assert_eq!(
+        std::fs::read_to_string(vault.join("records/Observation.ndjson")).unwrap(),
+        stored
+    );
+}

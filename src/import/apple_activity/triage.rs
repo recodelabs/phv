@@ -1,15 +1,15 @@
 //! Decides which rows are worth converting, before any FHIR is built.
 
 use super::convert::{
-    ACTIVITY_TYPE_SYSTEM, CODE_ACTIVITY_TYPE, DAILY_STEPS_SYSTEM, SOURCE_ROW_SYSTEM, TZ_CODE,
-    WORKOUT_MEASURE_SYSTEM, WORKOUT_SYSTEM, member_key,
+    ACTIVITY_TYPE_SYSTEM, CODE_ACTIVITY_TYPE, DAILY_STEPS_SYSTEM, EXPORT_THROUGH_SYSTEM,
+    SOURCE_ROW_SYSTEM, TZ_CODE, WORKOUT_MEASURE_SYSTEM, WORKOUT_SYSTEM, member_key,
 };
 use super::export::{DailySteps, Export, Workout};
-use super::{Overlap, Tally, TimeZoneHold};
+use super::{EditedHold, OlderExportHold, Overlap, Tally, TimeZoneHold};
 use crate::canon::parse_json;
 use crate::error::{Issue, PhvError};
 use crate::store::line_id;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
 
@@ -30,6 +30,9 @@ struct StoredWorkout {
 pub struct VaultIndex {
     days: HashMap<String, StoredDay>,
     workouts: HashMap<String, StoredWorkout>,
+    /// The newest export date tagged on any stored day or workout. Records stored before
+    /// the date was tagged have none, so a vault of only those has no date to compare.
+    through: Option<NaiveDate>,
 }
 
 /// What it takes to tell whether two workouts are one session.
@@ -66,13 +69,21 @@ impl Session {
     }
 }
 
-fn row_hash_of(resource: &Value) -> Option<String> {
+fn tag_code(resource: &Value, system: &str) -> Option<String> {
     resource["meta"]["tag"]
         .as_array()?
         .iter()
-        .find(|tag| tag["system"] == SOURCE_ROW_SYSTEM)?["code"]
+        .find(|tag| tag["system"] == system)?["code"]
         .as_str()
         .map(str::to_string)
+}
+
+fn row_hash_of(resource: &Value) -> Option<String> {
+    tag_code(resource, SOURCE_ROW_SYSTEM)
+}
+
+fn through_of(resource: &Value) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(&tag_code(resource, EXPORT_THROUGH_SYSTEM)?, "%Y-%m-%d").ok()
 }
 
 fn time_zone_of(extension_holder: &Value) -> Option<String> {
@@ -112,6 +123,11 @@ impl VaultIndex {
                     format!("this stored line cannot be read: {e}"),
                 )])
             })?;
+            if identifier_in(&resource, DAILY_STEPS_SYSTEM).is_some()
+                || identifier_in(&resource, WORKOUT_SYSTEM).is_some()
+            {
+                index.through = index.through.max(through_of(&resource));
+            }
             if let Some(date) = identifier_in(&resource, DAILY_STEPS_SYSTEM) {
                 let stored = StoredDay {
                     row_hash: row_hash_of(&resource),
@@ -182,7 +198,28 @@ pub struct Triage {
     pub duplicates_in_file: usize,
     pub conflicts: Vec<String>,
     pub other_time_zone: Vec<TimeZoneHold>,
+    pub older_export: Vec<OlderExportHold>,
+    pub edited_since_import: Vec<EditedHold>,
     pub overlaps: Vec<Overlap>,
+}
+
+/// How a row compares with the record stored for its key.
+enum Stored {
+    /// Someone replaced the record by hand, so it no longer says which row it came from.
+    Edited,
+    Unchanged,
+    /// The row differs, and the file is older than the newest export the vault holds.
+    Older,
+    Differs,
+}
+
+fn judge(stored_hash: Option<&str>, row_hash: &str, file_is_older: bool) -> Stored {
+    match stored_hash {
+        None => Stored::Edited,
+        Some(hash) if hash == row_hash => Stored::Unchanged,
+        Some(_) if file_is_older => Stored::Older,
+        Some(_) => Stored::Differs,
+    }
 }
 
 /// One row per key. Identical repeats collapse. A key with different rows is set aside
@@ -237,20 +274,47 @@ pub fn triage(export: &Export, index: &VaultIndex, keep_overlaps: bool) -> Triag
         &mut out.duplicates_in_file,
         &mut out.conflicts,
     );
+    // Only a file older than the newest export in the vault is held. With no date on either
+    // side there is nothing to compare, so the file is taken as the newer one.
+    let older_than = match (export.through, index.through) {
+        (Some(file), Some(vault)) if file < vault => Some((file, vault)),
+        _ => None,
+    };
+    let older_hold = |kind: &str, key: &str| {
+        let (file, vault) = older_than.expect("only called for an older file");
+        OlderExportHold {
+            kind: kind.to_string(),
+            key: key.to_string(),
+            file_through: file.to_string(),
+            vault_through: vault.to_string(),
+        }
+    };
+    let edited_hold = |kind: &str, key: &str| EditedHold {
+        kind: kind.to_string(),
+        key: key.to_string(),
+    };
+
     for day in days {
-        match index.days.get(&day.date) {
-            None => out.days.push((day, Action::New)),
-            Some(stored) if stored.row_hash.as_deref() == Some(&day.row_hash) => {
-                out.daily_steps.unchanged += 1;
-            }
-            Some(stored) if stored.time_zone.as_deref() != Some(&day.time_zone) => {
+        let Some(stored) = index.days.get(&day.date) else {
+            out.days.push((day, Action::New));
+            continue;
+        };
+        match judge(
+            stored.row_hash.as_deref(),
+            &day.row_hash,
+            older_than.is_some(),
+        ) {
+            Stored::Edited => out.edited_since_import.push(edited_hold("day", &day.date)),
+            Stored::Unchanged => out.daily_steps.unchanged += 1,
+            Stored::Older => out.older_export.push(older_hold("day", &day.date)),
+            Stored::Differs if stored.time_zone.as_deref() != Some(&day.time_zone) => {
                 out.other_time_zone.push(TimeZoneHold {
                     date: day.date.clone(),
                     stored_time_zone: stored.time_zone.clone(),
                     exported_time_zone: day.time_zone.clone(),
                 });
             }
-            Some(_) => out.days.push((day, Action::Changed)),
+            Stored::Differs => out.days.push((day, Action::Changed)),
         }
     }
 
@@ -263,12 +327,21 @@ pub fn triage(export: &Export, index: &VaultIndex, keep_overlaps: bool) -> Triag
     );
     let mut new_workouts = Vec::new();
     for workout in workouts {
-        match index.workouts.get(&workout.uuid) {
-            None => new_workouts.push(workout),
-            Some(stored) if stored.row_hash.as_deref() == Some(&workout.row_hash) => {
-                out.workout_tally.unchanged += 1;
-            }
-            Some(_) => out.workouts.push((workout, Action::Changed)),
+        let Some(stored) = index.workouts.get(&workout.uuid) else {
+            new_workouts.push(workout);
+            continue;
+        };
+        match judge(
+            stored.row_hash.as_deref(),
+            &workout.row_hash,
+            older_than.is_some(),
+        ) {
+            Stored::Edited => out
+                .edited_since_import
+                .push(edited_hold("workout", &workout.uuid)),
+            Stored::Unchanged => out.workout_tally.unchanged += 1,
+            Stored::Older => out.older_export.push(older_hold("workout", &workout.uuid)),
+            Stored::Differs => out.workouts.push((workout, Action::Changed)),
         }
     }
 

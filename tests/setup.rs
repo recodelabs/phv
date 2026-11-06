@@ -246,6 +246,21 @@ fn each_family_member_gets_a_separate_vault() {
 }
 
 #[test]
+fn use_prints_json_with_the_json_flag() {
+    let e = env();
+    assert!(phv(&e, &["setup"], &answers(&[])).status.success());
+    let ben = ["ben", "", "Example", "Ben", "2015-06-01"];
+    assert!(phv(&e, &["setup"], &ben).status.success());
+    let o = phv(&e, &["--json", "use", "ben"], &[]);
+    assert!(o.status.success(), "{o:?}");
+    let value: serde_json::Value = serde_json::from_str(&stdout(&o)).expect("JSON output");
+    assert_eq!(value, serde_json::json!({"default": "ben"}));
+    // Without the flag it is still a plain sentence.
+    let plain = stdout(&phv(&e, &["use", "maya"], &[]));
+    assert!(plain.contains("default vault is now maya"), "{plain}");
+}
+
+#[test]
 fn a_duplicate_or_invalid_name_is_refused() {
     let e = env();
     assert!(phv(&e, &["setup"], &answers(&[])).status.success());
@@ -449,6 +464,68 @@ fn rerunning_an_interrupted_setup_says_what_is_left() {
             .status
             .success()
     );
+}
+
+#[test]
+fn a_registered_vault_cannot_be_registered_again_under_another_name() {
+    let e = env();
+    add_git(&e);
+    let first = phv(&e, &["setup"], &answers(&["n"]));
+    assert!(first.status.success(), "{first:?}");
+    let maya = vault(&e, "maya");
+    // Records that nobody reviewed or committed yet.
+    let before = fs::read_to_string(maya.join("records/Patient.ndjson")).unwrap();
+    let link = e.home.join("maya-link");
+    symlink(&maya, &link).unwrap();
+    let spellings = [
+        maya.display().to_string(),
+        format!("{}/", maya.display()),
+        format!("{}/../maya", maya.display()),
+        link.display().to_string(),
+    ];
+    for spelling in &spellings {
+        let o = phv(&e, &["setup"], &["alias", spelling, "y"]);
+        assert_eq!(o.status.code(), Some(2), "{spelling}: {o:?}");
+        let message = stderr(&o);
+        assert!(message.contains("maya"), "{spelling}: {message}");
+        assert!(!registered(&e).contains("alias"), "{spelling}");
+        assert!(!maya.join(".git").exists(), "{spelling}");
+    }
+    assert_eq!(
+        fs::read_to_string(maya.join("records/Patient.ndjson")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn setup_makes_no_commit_in_a_folder_that_already_has_a_git_repo() {
+    let e = env();
+    add_git(&e);
+    let root = e.home.join("existing");
+    init_unregistered(&e, &root);
+    let git = |args: &[&str]| {
+        Command::new(e.bin.join("git"))
+            .args(["-C", root.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    assert!(git(&["init", "-q", "-b", "main"]).status.success());
+    // Setup adds the Patient, so there are records nobody has reviewed.
+    let o = phv(
+        &e,
+        &["setup"],
+        &["maya", "~/existing", "Example", "Maya", "1980-01-01"],
+    );
+    assert!(o.status.success(), "{o:?}");
+    let out = stdout(&o);
+    assert!(out.contains("already has a Git repo"), "{out}");
+    assert!(!out.contains("Created a Git repo"), "{out}");
+    let commits = git(&["rev-list", "--all", "--count"]);
+    assert_eq!(String::from_utf8_lossy(&commits.stdout).trim(), "0");
+    let status = git(&["status", "--short"]);
+    let status = String::from_utf8_lossy(&status.stdout).to_string();
+    assert!(status.contains("records/"), "{status}");
 }
 
 #[test]

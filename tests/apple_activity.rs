@@ -29,11 +29,16 @@ fn morning_run(uuid: &str, source: &str) -> Value {
     run(uuid, source, "2026-01-10T08:00:00Z", "2026-01-10T08:30:00Z")
 }
 
-/// An export file with a correct summary line.
+/// An export file with a correct summary line, made on 2026-01-31.
 fn export(rows: &[Value]) -> String {
+    export_through(rows, "2026-01-31")
+}
+
+/// An export file whose summary says it covers the days up to `through`.
+fn export_through(rows: &[Value], through: &str) -> String {
     let count = |kind: &str| rows.iter().filter(|r| r["kind"] == kind).count();
     let summary = json!({"counts":{"dailySteps":count("dailySteps"),"workouts":count("workout")},
-        "failures":[],"kind":"summary","through":"2026-01-31","timeZone":"Etc/UTC","v":1});
+        "failures":[],"kind":"summary","through":through,"timeZone":"Etc/UTC","v":1});
     lines(rows.iter().chain([&summary]))
 }
 
@@ -201,7 +206,12 @@ async fn daily_steps_follow_the_time_based_profile() {
         .unwrap()
         .to_string();
     assert_eq!(hash.len(), 64);
+    assert_eq!(
+        stored["meta"]["tag"][1],
+        json!({"system":"urn:phv:export-through","code":"2026-01-31"})
+    );
     stored["meta"]["tag"][0]["code"] = json!("HASH");
+    stored["meta"]["tag"].as_array_mut().unwrap().truncate(1);
     stored["id"] = json!("ID");
     assert_eq!(
         stored,
@@ -979,4 +989,353 @@ async fn zero_calories_does_not_count_as_a_field_when_choosing_a_session() {
     let report = import(&phv, &export(&[zero, real])).await;
     assert_eq!(report.overlaps[0].skipped, UUID_A);
     assert_eq!(report.overlaps[0].kept, UUID_B);
+}
+
+// Older exports and corrected records are held, not written
+
+/// Replaces a stored resource with `edit` applied, as `phv replace` would.
+async fn replace_with(phv: &Phv, mut stored: Value, edit: impl FnOnce(&mut Value)) {
+    edit(&mut stored);
+    let id = stored["id"].as_str().unwrap().to_string();
+    phv.replace("Observation", &id, &stored, false)
+        .await
+        .unwrap();
+}
+
+fn without_tag(system: &'static str) -> impl FnOnce(&mut Value) {
+    move |resource| {
+        resource["meta"]["tag"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|t| t["system"] != system);
+    }
+}
+
+/// Strips the export date from every stored record, as if they were imported before it existed.
+async fn forget_export_dates(phv: &Phv) {
+    for stored in observations(phv) {
+        if stored["meta"]["tag"].is_array() {
+            replace_with(phv, stored, without_tag("urn:phv:export-through")).await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_older_export_does_not_overwrite_newer_values() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let mut newer_run = morning_run(UUID_A, "Watch");
+    newer_run["distanceMeters"] = json!(5000);
+    import(
+        &phv,
+        &export_through(&[day("2026-01-02", 7000), newer_run], "2026-02-10"),
+    )
+    .await;
+    let before = records(&phv, "Observation");
+
+    let mut older_run = morning_run(UUID_A, "Watch");
+    older_run["energyKcal"] = json!(100);
+    let report = import(
+        &phv,
+        &export_through(&[day("2026-01-02", 6123), older_run], "2026-01-31"),
+    )
+    .await;
+    assert_eq!(records(&phv, "Observation"), before);
+    assert_eq!(report.resources_written, 0);
+    assert_eq!(report.daily_steps, Tally::default());
+    assert_eq!(report.workouts, Tally::default());
+    assert!(report.changed_days.is_empty());
+    let held: Vec<(&str, &str)> = report
+        .older_export
+        .iter()
+        .map(|h| (h.kind.as_str(), h.key.as_str()))
+        .collect();
+    assert_eq!(held, vec![("day", "2026-01-02"), ("workout", UUID_A)]);
+    assert_eq!(report.older_export[0].file_through, "2026-01-31");
+    assert_eq!(report.older_export[0].vault_through, "2026-02-10");
+    assert!(report.is_clean());
+}
+
+#[tokio::test]
+async fn an_older_export_still_adds_rows_the_vault_has_not_seen() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    import(
+        &phv,
+        &export_through(&[day("2026-01-02", 7000)], "2026-02-10"),
+    )
+    .await;
+    let report = import(
+        &phv,
+        &export_through(
+            &[day("2026-01-02", 6123), day("2026-01-01", 4000)],
+            "2026-01-31",
+        ),
+    )
+    .await;
+    assert_eq!(report.daily_steps.new, 1);
+    assert_eq!(report.older_export.len(), 1);
+    let steps: Vec<String> = with_code(&phv, "41950-7")
+        .iter()
+        .map(|o| o["valueQuantity"]["value"].to_string())
+        .collect();
+    assert_eq!(steps, vec!["4000", "7000"]);
+}
+
+#[tokio::test]
+async fn a_newer_export_still_updates_values() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let mut older_run = morning_run(UUID_A, "Watch");
+    older_run["distanceMeters"] = json!(5000);
+    import(
+        &phv,
+        &export_through(&[day("2026-01-02", 6123), older_run], "2026-01-31"),
+    )
+    .await;
+
+    let report = import(
+        &phv,
+        &export_through(
+            &[day("2026-01-02", 7000), morning_run(UUID_A, "Watch")],
+            "2026-02-10",
+        ),
+    )
+    .await;
+    assert_eq!(report.daily_steps.changed, 1);
+    assert_eq!(report.workouts.changed, 1);
+    assert!(report.older_export.is_empty());
+    let day = with_code(&phv, "41950-7").remove(0);
+    assert_eq!(day["valueQuantity"]["value"].to_string(), "7000");
+    assert_eq!(day["meta"]["tag"][1]["code"], "2026-02-10");
+    assert!(with_code(&phv, "55412-1").is_empty());
+}
+
+#[tokio::test]
+async fn the_same_export_twice_writes_nothing_and_holds_nothing() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let text = export_through(
+        &[day("2026-01-02", 7000), morning_run(UUID_A, "Watch")],
+        "2026-02-10",
+    );
+    import(&phv, &text).await;
+    let before = records(&phv, "Observation");
+    let report = import(&phv, &text).await;
+    assert_eq!(records(&phv, "Observation"), before);
+    assert_eq!(report.resources_written, 0);
+    assert!(report.older_export.is_empty());
+    assert!(report.edited_since_import.is_empty());
+}
+
+#[tokio::test]
+async fn records_stored_before_export_dates_were_tagged_keep_working() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    import(
+        &phv,
+        &export_through(
+            &[day("2026-01-02", 7000), morning_run(UUID_A, "Watch")],
+            "2026-02-10",
+        ),
+    )
+    .await;
+    forget_export_dates(&phv).await;
+    assert!(!records(&phv, "Observation").contains("urn:phv:export-through"));
+
+    // The same file is still unchanged, and a changed row still updates, because nothing
+    // says how new the stored values are.
+    let unchanged = import(
+        &phv,
+        &export_through(
+            &[day("2026-01-02", 7000), morning_run(UUID_A, "Watch")],
+            "2026-02-10",
+        ),
+    )
+    .await;
+    assert_eq!(unchanged.resources_written, 0);
+
+    let mut edited = morning_run(UUID_A, "Watch");
+    edited["energyKcal"] = json!(400);
+    let report = import(
+        &phv,
+        &export_through(&[day("2026-01-02", 6123), edited], "2026-01-31"),
+    )
+    .await;
+    assert!(report.older_export.is_empty());
+    assert_eq!(
+        (report.daily_steps.changed, report.workouts.changed),
+        (1, 1)
+    );
+    // What it writes carries the date from then on.
+    assert!(records(&phv, "Observation").contains("urn:phv:export-through"));
+}
+
+#[tokio::test]
+async fn an_untagged_record_is_held_by_the_newest_date_anywhere_in_the_vault() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    import(
+        &phv,
+        &export_through(&[day("2026-01-02", 7000)], "2026-01-31"),
+    )
+    .await;
+    forget_export_dates(&phv).await;
+    import(
+        &phv,
+        &export_through(&[day("2026-02-05", 3000)], "2026-02-10"),
+    )
+    .await;
+    let report = import(
+        &phv,
+        &export_through(&[day("2026-01-02", 6123)], "2026-02-01"),
+    )
+    .await;
+    assert_eq!(report.older_export.len(), 1);
+    assert_eq!(report.older_export[0].vault_through, "2026-02-10");
+}
+
+#[tokio::test]
+async fn a_summary_with_a_through_that_is_not_a_date_is_refused() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let message = usage_error(
+        phv.import_apple_activity(
+            &export_through(&[day("2026-01-02", 7000)], "yesterday"),
+            &ImportOptions::default(),
+        )
+        .await,
+    );
+    assert!(message.contains("through"), "{message}");
+    assert_eq!(records(&phv, "Observation"), "");
+}
+
+#[tokio::test]
+async fn a_corrected_day_survives_a_reimport_and_is_reported() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let text = export(&[day("2026-01-01", 5000), day("2026-01-02", 6000)]);
+    import(&phv, &text).await;
+    let stored = with_code(&phv, "41950-7")
+        .into_iter()
+        .find(|o| o["effectiveDateTime"] == "2026-01-01")
+        .unwrap();
+    replace_with(&phv, stored, |o| {
+        without_tag("urn:phv:source-row")(o);
+        o["valueQuantity"]["value"] = json!(4242);
+    })
+    .await;
+    let before = records(&phv, "Observation");
+
+    let report = import(&phv, &text).await;
+    assert_eq!(records(&phv, "Observation"), before);
+    assert_eq!(report.resources_written, 0);
+    assert!(report.changed_days.is_empty());
+    assert_eq!(report.daily_steps.changed, 0);
+    assert_eq!(report.daily_steps.unchanged, 1);
+    assert_eq!(report.edited_since_import.len(), 1);
+    assert_eq!(report.edited_since_import[0].kind, "day");
+    assert_eq!(report.edited_since_import[0].key, "2026-01-01");
+    assert!(report.is_clean());
+}
+
+#[tokio::test]
+async fn a_corrected_workout_survives_a_reimport_and_is_reported() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let text = export(&[morning_run(UUID_A, "Watch")]);
+    import(&phv, &text).await;
+    let panel = with_code(&phv, "PAPanel").remove(0);
+    replace_with(&phv, panel, |o| {
+        without_tag("urn:phv:source-row")(o);
+        o["device"]["display"] = json!("Corrected by hand");
+    })
+    .await;
+    let before = records(&phv, "Observation");
+
+    // Even a changed row does not take the correction back.
+    let mut changed = morning_run(UUID_A, "Watch");
+    changed["energyKcal"] = json!(999);
+    for text in [text, export(&[changed])] {
+        let report = import(&phv, &text).await;
+        assert_eq!(records(&phv, "Observation"), before);
+        assert_eq!(report.resources_written, 0);
+        assert_eq!(report.workouts, Tally::default());
+        assert_eq!(report.edited_since_import.len(), 1);
+        assert_eq!(report.edited_since_import[0].kind, "workout");
+        assert_eq!(report.edited_since_import[0].key, UUID_A);
+    }
+}
+
+#[tokio::test]
+async fn a_member_something_else_references_is_kept_and_reported() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    import(&phv, &export(&[morning_run(UUID_A, "Watch")])).await;
+    let calories_id = with_code(&phv, "55424-6")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let added = phv
+        .add(
+            &json!({"resourceType":"DiagnosticReport","status":"final",
+                "code":{"text":"Activity summary"},"subject":{"reference":patient},
+                "effectiveDateTime":"2026-01-10",
+                "result":[{"reference":format!("Observation/{calories_id}")}]}),
+            &AddOptions::default(),
+        )
+        .await
+        .unwrap();
+    let diagnostic_report = added.created[0].clone();
+
+    let mut without_energy = morning_run(UUID_A, "Watch");
+    without_energy.as_object_mut().unwrap().remove("energyKcal");
+    let report = import(&phv, &export(&[without_energy.clone()])).await;
+    assert_eq!(report.workouts.changed, 1);
+    assert_eq!(report.kept_members.len(), 1);
+    assert_eq!(report.kept_members[0].workout, UUID_A);
+    assert_eq!(
+        report.kept_members[0].member,
+        format!("Observation/{calories_id}")
+    );
+    assert_eq!(report.kept_members[0].measure, "55424-6");
+    assert_eq!(
+        report.kept_members[0].referenced_by,
+        vec![diagnostic_report]
+    );
+    assert!(report.is_clean());
+    // The member stays, the panel no longer lists it, and the vault checks clean.
+    assert_eq!(with_code(&phv, "55424-6").len(), 1);
+    assert_eq!(
+        with_code(&phv, "PAPanel")[0]["hasMember"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let errors: Vec<_> = phv
+        .check()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|i| i.is_error())
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+
+    // A second import of the same row has nothing left to do.
+    let again = import(&phv, &export(&[without_energy])).await;
+    assert_eq!(again.workouts.unchanged, 1);
+    assert_eq!(again.resources_written, 0);
+}
+
+#[tokio::test]
+async fn a_member_nothing_references_is_still_removed() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    import(&phv, &export(&[morning_run(UUID_A, "Watch")])).await;
+    let mut without_energy = morning_run(UUID_A, "Watch");
+    without_energy.as_object_mut().unwrap().remove("energyKcal");
+    let report = import(&phv, &export(&[without_energy])).await;
+    assert!(report.kept_members.is_empty());
+    assert!(with_code(&phv, "55424-6").is_empty());
 }

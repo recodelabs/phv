@@ -42,7 +42,7 @@ ben = "/Users/example/health-vaults/ben"
 
 `phv init PATH` creates a data repo layout. It refuses to run inside a checkout whose `origin` remote is `recodelabs/phv`, and every command refuses a directory without `phv.toml`. This guards against personal data reaching the public code repo. The code repo's `.gitignore` also excludes `/records/`, `/sources/` and `/phv.toml`.
 
-Git is optional, and no phv command needs it to work. Only `phv setup` runs `git` or `gh`, and only after the person agrees. In a vault with Git, the person reviews with `git diff` and commits what they accept, so an uncommitted change is an unreviewed change. Whether phv should later commit on the person's behalf is an open decision for a future sub-project.
+Git is optional, and no phv command needs it to work. Only `phv setup` runs `git` or `gh`, and only after the person agrees. In a vault with Git, the person reviews with `git -C <vault> status`, then `git -C <vault> add -N . && git -C <vault> diff` (plain `git diff` shows nothing for a new file, and `add -N` makes new files appear in it), and commits what they accept with `git -C <vault> add -A && git -C <vault> commit -m "..."`, so an uncommitted change is an unreviewed change. Whether phv should later commit on the person's behalf is an open decision for a future sub-project.
 
 Without Git, a vault has no history and no undo. The person's confirmation before a write is the only review, and `phv replace` and `phv rm` warn that they cannot be undone.
 
@@ -286,7 +286,7 @@ The flow:
 4. `phv validate` checks the Bundle. Claude fixes errors and validates again.
 5. The skill shows the person a table of what it extracted, next to what the report says, and asks for confirmation.
 6. `phv add --source SHA256 --agent phv-add-lab` writes the records.
-7. If the vault has Git, the skill tells the person to review with `git diff` and commit. Otherwise it says the write is final, with no history to undo it.
+7. If the vault has Git, the skill tells the person to review with `git -C <vault> status` and `git -C <vault> add -N . && git -C <vault> diff`, then commit with `git -C <vault> add -A && git -C <vault> commit`. Otherwise it says the write is final, with no history to undo it.
 
 Rules the skill states:
 
@@ -304,8 +304,8 @@ The skill looks up codes in Health Samurai's hosted [Termbox](https://www.health
 What we found on the live service on 2026-11-06:
 
 - **LOINC:** version 2.82 is searchable. Results are not ranked by what is likely, and include parts, deprecated codes and panels, so the skill has explicit rules for choosing, and the person confirms the codes.
-- **ICD-10 (WHO 2019):** searchable, including chapter ranges such as `E10-E14`, which are not usable as a diagnosis code.
-- **ICD-11:** the code system is listed with `content: not-present`, and a search returned an error, so it cannot be used there. Lab results do not need ICD. Choosing an ICD-11 source belongs to the visit note skill in sub-project 2.
+- **ICD-10:** searchable, including chapter ranges such as `E10-E14`, which are not usable as a diagnosis code. Document ingestion uses the ICD-10 that Termbox provides, including WHO 2019 and ICD-10-CM.
+- **ICD-11:** the code system is listed with `content: not-present`, and a search returned an error, so phv does not use it.
 
 Termbox's docs say authentication is coming soon, and they give no statement on request logging or retention.
 
@@ -338,11 +338,11 @@ Test data is synthetic. Real health data never goes in this repo.
 Each gets its own spec and plan.
 
 1. **Vault core:** this spec, including the first lab result skill.
-2. **Document ingestion:** more AI skills that map photos, visit notes and receipts to FHIR JSON and submit it through `phv add`. Needs a decision on the source for ICD-11 codes, which Termbox does not hold.
+2. **Document ingestion (next):** more AI skills that map photos, visit notes and receipts to FHIR JSON and submit it through `phv add`, coding diagnoses with the ICD-10 that Termbox provides.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus limits on what an MCP session can read.
 4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
-6. **Browser:** a local FHIR browser, designed in `2026-11-06-fhir-browser-design.md`, that queries the vault's files directly, with charts for activity and no web input. A warehouse is not planned for now. If one returns: `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
+6. **Browser:** a local FHIR browser, designed in `2026-11-06-fhir-browser-design.md`, that queries the vault's files directly, with charts for activity and no web input. A warehouse is on hold, since querying the local files is enough. If one returns: `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
 
 ### Notes for the importer sub-project
 

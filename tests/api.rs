@@ -96,6 +96,31 @@ async fn post_get_list_put_delete_work() {
 }
 
 #[tokio::test]
+async fn a_wrongly_cased_type_cannot_delete_or_replace_a_record() {
+    let (_d, app, patient) = setup().await;
+    let id = patient.split_once('/').unwrap().1;
+    let (status, _) = send(
+        app.clone(),
+        "DELETE",
+        &format!("/resources/patient/{id}"),
+        vec![],
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let body = serde_json::to_vec(&serde_json::json!({"resourceType":"Patient"})).unwrap();
+    let (status, _) = send(
+        app.clone(),
+        "PUT",
+        &format!("/resources/patient/{id}"),
+        body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = send(app, "GET", &format!("/resources/{patient}"), vec![]).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn errors_are_operation_outcomes_with_the_right_status() {
     let (_d, app, patient) = setup().await;
 

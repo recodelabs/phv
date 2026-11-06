@@ -109,6 +109,21 @@ async fn check_finds_invalid_content_and_broken_references() {
 }
 
 #[tokio::test]
+async fn check_flags_a_stored_line_with_a_bare_choice_name() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    fs::write(
+        observation_path(&phv),
+        format!(
+            "{{\"code\":{{\"text\":\"x\"}},\"id\":\"a\",\"resourceType\":\"Observation\",\"status\":\"final\",\"subject\":{{\"reference\":\"{patient}\"}},\"value\":\"garbage\"}}\n"
+        ),
+    )
+    .unwrap();
+    let found = codes(&phv).await;
+    assert!(found.contains(&"PHV-CHOICE".to_string()), "{found:?}");
+}
+
+#[tokio::test]
 async fn check_finds_windows_line_endings_and_a_missing_final_newline() {
     let (_d, phv) = phv().await;
     let patient = add_patient(&phv).await;

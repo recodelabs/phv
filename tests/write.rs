@@ -275,6 +275,71 @@ async fn remove_refuses_a_referenced_resource_then_allows_it() {
 }
 
 #[tokio::test]
+async fn a_wrongly_cased_type_is_a_usage_error_on_remove_and_replace_and_changes_nothing() {
+    // Whatever the disk does with `patient.ndjson`, the type name is checked first.
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let obs = phv
+        .add(&lab(&patient, "1.50"), &AddOptions::default())
+        .await
+        .unwrap()
+        .created[0]
+        .clone();
+    let patient_id = patient.split_once('/').unwrap().1;
+    let obs_id = obs.split_once('/').unwrap().1;
+    let before_patient = records(&phv, "Patient");
+    let before_obs = records(&phv, "Observation");
+    for bad in ["patient", "PATIENT", "observation", "OBSERVATION"] {
+        let id = if bad.eq_ignore_ascii_case("patient") {
+            patient_id
+        } else {
+            obs_id
+        };
+        assert!(
+            matches!(phv.remove(bad, id).await.unwrap_err(), PhvError::Usage(_)),
+            "remove {bad}"
+        );
+        let input = if bad.eq_ignore_ascii_case("patient") {
+            json!({"resourceType":"Patient","name":[{"family":"Other"}]})
+        } else {
+            lab(&patient, "9")
+        };
+        assert!(
+            matches!(
+                phv.replace(bad, id, &input, false).await.unwrap_err(),
+                PhvError::Usage(_)
+            ),
+            "replace {bad}"
+        );
+    }
+    assert_eq!(records(&phv, "Patient"), before_patient);
+    assert_eq!(records(&phv, "Observation"), before_obs);
+}
+
+#[tokio::test]
+async fn a_reference_with_a_wrongly_cased_type_is_refused() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let id = patient.split_once('/').unwrap().1;
+    for bad in [format!("PATIENT/{id}"), format!("patient/{id}")] {
+        let err = phv
+            .add(&lab(&bad, "1.50"), &AddOptions::default())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&err, PhvError::Conflict(issues) if issues.iter().any(|i| i.code == "PHV-REF")),
+            "{bad}: {err}"
+        );
+        assert_eq!(records(&phv, "Observation"), "", "{bad}");
+    }
+    let issues = phv
+        .validate_submission(&lab(&format!("PATIENT/{id}"), "1"))
+        .await
+        .unwrap();
+    assert!(issues.iter().any(|i| i.code == "PHV-REF"), "{issues:?}");
+}
+
+#[tokio::test]
 async fn validate_submission_reports_problems_without_writing() {
     let (_d, phv) = phv().await;
     let patient = add_patient(&phv).await;

@@ -212,13 +212,16 @@ impl Phv {
             return Err(PhvError::Invalid(errors));
         }
 
-        self.vault()
-            .write_atomic(&self.vault().root().join(&relative), bytes)?;
-        self.vault().apply(&[Change::Upsert {
+        // Refuse before the file is written, so a refused record cannot leave an orphan behind.
+        let changes = [Change::Upsert {
             resource_type: "DocumentReference".into(),
             id: id.clone(),
             line: canon_resource(&resource),
-        }])?;
+        }];
+        self.vault().check_changes(&changes)?;
+        self.vault()
+            .write_atomic(&self.vault().root().join(&relative), bytes)?;
+        self.vault().apply(&changes)?;
         Ok(SourceReport {
             sha256,
             document_reference,
