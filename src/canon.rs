@@ -2,6 +2,7 @@
 
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -48,6 +49,59 @@ fn write_value(value: &Value, out: &mut String) {
     }
 }
 
+/// Parses JSON text, rejecting invalid JSON and objects with a repeated key at any depth.
+///
+/// Keys are compared after decoding, so `"a"` and `"\u0061"` count as the same key.
+/// serde_json silently keeps the last of a repeated key, which would hide data.
+pub fn parse_json(text: &str) -> Result<Value, String> {
+    let value: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    check_duplicate_keys(text)?;
+    Ok(value)
+}
+
+/// Scans text already known to be valid JSON. The stack holds one entry per open
+/// container: a key set for an object, `None` for an array.
+fn check_duplicate_keys(text: &str) -> Result<(), String> {
+    let bytes = text.as_bytes();
+    let mut stack: Vec<Option<HashSet<String>>> = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' => stack.push(Some(HashSet::new())),
+            b'[' => stack.push(None),
+            b'}' | b']' => {
+                stack.pop();
+            }
+            b'"' => {
+                let start = i;
+                i += 1;
+                while bytes[i] != b'"' {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                let mut next = i + 1;
+                while next < bytes.len() && bytes[next].is_ascii_whitespace() {
+                    next += 1;
+                }
+                if bytes.get(next) == Some(&b':')
+                    && let Some(Some(keys)) = stack.last_mut()
+                {
+                    let key: String =
+                        serde_json::from_str(&text[start..=i]).map_err(|e| e.to_string())?;
+                    if !keys.insert(key.clone()) {
+                        return Err(format!("duplicate key `{key}`"));
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    Ok(())
+}
+
 /// Canonical text with every key in bytewise order.
 pub fn canon_value(value: &Value) -> String {
     let mut out = String::new();
@@ -56,6 +110,10 @@ pub fn canon_value(value: &Value) -> String {
 }
 
 /// Canonical NDJSON line: `resourceType`, `id`, then the other keys in bytewise order.
+///
+/// Numbers keep their written digits and precision (`1.50` stays `1.50`), but serde_json
+/// normalizes exponent notation (`1E2` becomes `1e+2`). The output is stable when parsed
+/// and written again.
 pub fn canon_resource(resource: &Value) -> String {
     let Some(map) = resource.as_object() else {
         return canon_value(resource);
@@ -96,6 +154,9 @@ pub fn strip_volatile(resource: &mut Value) {
 }
 
 /// First 32 hex characters of the SHA-256 of the type and canonical content, without `id` or volatile `meta`.
+///
+/// This does not check that `resourceType` is present: a missing or non-string one is
+/// treated as empty. Callers must validate `resourceType` first (Task 4's `prepare` does).
 pub fn derive_id(resource: &Value) -> String {
     let mut copy = resource.clone();
     strip_volatile(&mut copy);
@@ -193,5 +254,97 @@ mod tests {
         let c = parse(r#"{"resourceType":"Condition","status":"final"}"#);
         assert_ne!(derive_id(&a), derive_id(&b));
         assert_ne!(derive_id(&a), derive_id(&c));
+    }
+
+    #[test]
+    fn parse_json_rejects_repeated_keys_at_any_depth() {
+        for text in [
+            r#"{"a":1,"a":2}"#,
+            r#"{"x":{"a":1,"a":2}}"#,
+            r#"{"x":[{"ok":1},{"a":1,"a":2}]}"#,
+            r#"{"a":1,"a":2}"#,
+            r#"{"a\n":1,"a\u000a":2}"#,
+        ] {
+            assert!(parse_json(text).is_err(), "accepted {text}");
+        }
+        let err = parse_json(r#"{"x":{"dup":1,"dup":2}}"#).unwrap_err();
+        assert!(err.contains("dup"), "{err}");
+    }
+
+    #[test]
+    fn parse_json_allows_same_key_in_sibling_objects() {
+        assert!(parse_json(r#"{"x":{"a":1},"y":{"a":2},"z":[{"a":1},{"a":2}]}"#).is_ok());
+    }
+
+    #[test]
+    fn parse_json_does_not_mistake_strings_for_keys() {
+        assert!(parse_json(r#"{"a":"b:c","b":"a"}"#).is_ok());
+        assert!(parse_json(r#"{"a":"{\"b\":1,\"b\":2}","b":"}{\\","c":"\\\"a\":"}"#).is_ok());
+        assert!(parse_json(r#"{"a{":1,"b}":2,"c\"":3,"d\\":4}"#).is_ok());
+        assert!(parse_json(r#"["a:","a:"]"#).is_ok());
+    }
+
+    #[test]
+    fn parse_json_rejects_invalid_json() {
+        for text in ["", "{", r#"{"a":}"#, r#"{"a":1,}"#, "nope", r#"{"a":1} x"#] {
+            assert!(parse_json(text).is_err(), "accepted {text:?}");
+        }
+    }
+
+    #[test]
+    fn parse_json_keeps_numbers_exact() {
+        let v = parse_json(r#"{"resourceType":"O","v":1.50}"#).unwrap();
+        assert!(canon_resource(&v).contains(r#""v":1.50"#));
+    }
+
+    #[test]
+    fn exponents_are_normalized_by_serde_json_and_then_stable() {
+        let v = parse(r#"{"resourceType":"O","v":1E2}"#);
+        let once = canon_resource(&v);
+        assert_eq!(once, r#"{"resourceType":"O","v":1e+2}"#);
+        assert_eq!(canon_resource(&parse(&once)), once);
+    }
+
+    #[test]
+    fn canonical_text_is_a_fixed_point() {
+        for input in [
+            r#"{"resourceType":"O","t":"quote \" backslash \\ slash \/ tab \t nl \n"}"#,
+            r#"{"resourceType":"O","t":"nul \u0000 bell \u0007 unit sep \u001f del \u007f"}"#,
+            r#"{"resourceType":"O","t":"café é 日本語 😀 😀"}"#,
+            r#"{"resourceType":"O","a":-0,"b":-0.0,"c":0.0,"d":-1.50}"#,
+            r#"{"resourceType":"O","a":1e5,"b":1E-5,"c":1.5e+10,"d":2.50E3}"#,
+            r#"{"resourceType":"O","n":{"b":[1,{"z":null,"a":[true,false,[]]}],"a":{}}}"#,
+            r#"{"z":1,"id":"x","resourceType":"O","é":"é"}"#,
+        ] {
+            let once = canon_resource(&parse(input));
+            let twice = canon_resource(&parse(&once));
+            assert_eq!(once, twice, "not stable for {input}");
+        }
+    }
+
+    #[test]
+    fn derive_id_golden_value() {
+        // IDs are persistent: they are written into vault files and referenced by other
+        // resources. Changing the hash, the truncation or the canonical form breaks
+        // existing vaults, so this value must never change.
+        let v = parse(
+            r#"{"resourceType":"Observation","id":"ignored","status":"final","valueQuantity":{"value":1.50,"unit":"kg"},"meta":{"versionId":"2"}}"#,
+        );
+        assert_eq!(derive_id(&v), "50cb1183797d2eee6ecbcfaba122cfe9");
+    }
+
+    #[test]
+    fn strip_volatile_leaves_nested_and_non_object_meta_alone() {
+        let mut v = json!({"contained":[{"meta":{"lastUpdated":"x","versionId":"1"}}]});
+        let before = v.clone();
+        strip_volatile(&mut v);
+        assert_eq!(v, before);
+
+        for meta in [json!("text"), json!(5), json!(null), json!(["lastUpdated"])] {
+            let mut v = json!({"meta": meta});
+            let before = v.clone();
+            strip_volatile(&mut v);
+            assert_eq!(v, before);
+        }
     }
 }
