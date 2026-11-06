@@ -2,6 +2,7 @@
 
 pub mod documents;
 pub mod explorer;
+pub mod labs;
 pub mod observation;
 pub mod value;
 pub mod vitals;

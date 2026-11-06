@@ -2,6 +2,7 @@
 
 mod documents;
 mod explorer;
+mod labs;
 mod vitals;
 
 use super::guard;
@@ -217,6 +218,7 @@ pub fn router(vaults: Vaults) -> Router {
         .route("/assets/{file}", get(super::assets::asset))
         .merge(explorer::routes())
         .merge(vitals::routes())
+        .merge(labs::routes())
         .merge(documents::routes())
         .fallback(fallback)
         .with_state(app)
