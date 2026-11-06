@@ -4,6 +4,7 @@ pub mod check;
 pub mod cli;
 pub mod error;
 pub mod import;
+pub mod ips;
 pub mod mcp;
 pub mod read;
 pub mod refs;
