@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="phv logo: a folder shaped like a shield with a medical cross" width="140">
+</p>
+
 # phv: personal health vault
 
 phv keeps your health records as FHIR R4 files on your own machine. AI can help map your documents to FHIR, while phv itself validates and writes every record. Git is optional and adds history and undo.
