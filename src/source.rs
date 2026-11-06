@@ -1,5 +1,6 @@
 //! Original files and the links from records back to them.
 
+use crate::browser::model::documents::{CATEGORIES, CATEGORY_SYSTEM, UNCATEGORIZED};
 use crate::canon::{canon_resource, sha256_hex};
 use crate::error::{Issue, PhvError};
 use crate::store::{Change, Vault, line_id};
@@ -7,6 +8,24 @@ use crate::write::Phv;
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::path::Path;
+
+#[derive(Debug, Default, Clone)]
+pub struct SourceOptions {
+    /// What kind of document this is: `lab`, `receipt`, `visit-note`, `imaging` or `other`.
+    pub category: Option<String>,
+    /// When the file was added. The clock is read in the CLI and API layer, not here.
+    pub added_at: Option<String>,
+}
+
+fn check_category(category: &str) -> Result<(), PhvError> {
+    let known = category != UNCATEGORIZED && CATEGORIES.iter().any(|(code, _)| *code == category);
+    if known {
+        return Ok(());
+    }
+    Err(PhvError::Usage(format!(
+        "unknown category {category:?}: use lab, receipt, visit-note, imaging or other"
+    )))
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceReport {
@@ -126,6 +145,20 @@ impl Phv {
         file_name: &str,
         bytes: &[u8],
     ) -> Result<SourceReport, PhvError> {
+        self.source_add_with(file_name, bytes, &SourceOptions::default())
+            .await
+    }
+
+    /// Adding a file that is already stored changes nothing, so it keeps its first category.
+    pub async fn source_add_with(
+        &self,
+        file_name: &str,
+        bytes: &[u8],
+        options: &SourceOptions,
+    ) -> Result<SourceReport, PhvError> {
+        if let Some(category) = &options.category {
+            check_category(category)?;
+        }
         let _lock = self.vault().lock_async().await?;
         let sha256 = sha256_hex(bytes);
         let id = document_id(&sha256);
@@ -163,6 +196,13 @@ impl Phv {
             .and_then(|l| line_id(l).map(str::to_string));
         if let Some(patient) = patient {
             resource["subject"] = json!({"reference": format!("Patient/{patient}")});
+        }
+        if let Some(category) = &options.category {
+            resource["category"] =
+                json!([{"coding": [{"system": CATEGORY_SYSTEM, "code": category}]}]);
+        }
+        if let Some(added_at) = &options.added_at {
+            resource["date"] = json!(added_at);
         }
 
         let issues = self.validator.validate(&resource).await;

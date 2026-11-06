@@ -1,0 +1,6 @@
+{% for b in rows %}
+<tr data-x="{{ b.label }}"{% if let Some(value) = &b.value %} data-y="{{ value }}"{% endif %} data-title="{{ b.title }}">
+  <td>{% if let Some(query) = &b.query %}<a href="{{ path }}?{{ query }}">{{ b.label }}</a>{% else %}{{ b.label }}{% endif %}</td>
+  <td class="num{% if b.value.is_none() %} muted{% endif %}">{{ b.text }}</td>
+</tr>
+{% endfor %}

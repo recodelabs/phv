@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ resource_type }}{% endblock %}
+{% block main %}
+<h1>{% if label.is_empty() %}{{ resource_type }}{% else %}{{ label }}{% endif %}</h1>
+<p class="sub">
+  <a href="/v/{{ chrome.vault }}/fhir/{{ resource_type }}">{{ resource_type }}</a> / {{ id }}
+  {% if let Some((topic_label, topic_path)) = &topic %} · Shown under <a href="/v/{{ chrome.vault }}/{{ topic_path }}">{{ topic_label }}</a>{% endif %}
+  {% if let Some(source) = &source %} · Source {% if let Some(href) = &source.href %}<a href="{{ href }}">{{ source.title }}</a>{% else %}{{ source.title }}{% endif %}{% if let Some(agent) = &source.agent %} · Added by {{ agent }}{% endif %}{% endif %}
+</p>
+<pre>{{ json }}</pre>
+{% if !references.is_empty() %}
+<h2>References</h2>
+<ul class="plain">
+  {% for row in &references %}
+  <li>{% if let Some(target) = &row.target %}<a href="/v/{{ chrome.vault }}/fhir/{{ target }}">{{ row.reference }}</a>{% else %}{{ row.reference }}{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

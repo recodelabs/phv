@@ -18,7 +18,7 @@ phv (personal health vault) keeps one person's health records as FHIR R4 files o
 | Health memory (mood, sleep, diet) and limits on what AI can read | Sub-project 3 |
 | IPS and narrative summaries, IPS profile validation | Sub-project 4 |
 | HealthKit, Strava and other importers | Sub-project 5 |
-| Parquet warehouse through fhir-pipes-rs, web dashboard, browser upload | Sub-project 6 |
+| Web browser for records | Sub-project 6, see `2026-11-06-fhir-browser-design.md` |
 | Hosted or remote access | Deferred, laptop only |
 | Encryption at rest, Git LFS | Deferred, see Security |
 | More than one person in a vault | Not planned, use one vault per person |
@@ -102,7 +102,7 @@ Rules:
 4. phv keeps no manifest, index or timestamp file in the data repo.
 5. Any change to the format needs a new `format_version` and an explicit migration command. No ordinary command reformats existing lines.
 
-Full rebuilds are for the analytics warehouse only, which is generated and stays out of Git.
+Nothing in phv needs a full rebuild.
 
 We checked this against a real Git repo with a synthetic file of 100,000 resources (32 MB), rewriting the whole file for every change:
 
@@ -183,6 +183,8 @@ Default features are disabled on both octofhir crates, keeping HTTP clients out 
 - `status`: `current`.
 - `content[0].attachment`: `contentType` from the extension, and `url` set to the relative path.
 - `subject`: the vault's `Patient`, when one exists.
+- `category`: from `--category`, one of `lab`, `receipt`, `visit-note`, `imaging` or `other`, with system `urn:phv:document-category`. Optional. Adding the same file again keeps the first category.
+- `date`: when the file was added. The clock is read in the CLI and API layer, as with `Provenance.recorded`.
 
 Adding the same file again changes no records and reports the existing `DocumentReference`, which warns the person that it has already been imported. If the stored file is missing or damaged, the same call restores it. Re-running AI on a source may still produce different resources, so the warning is what stops accidental duplicates.
 
@@ -200,7 +202,7 @@ A health query must not quietly look empty. A record can give no true or false a
 
 `octofhir-fhirpath` 0.5.8 returns no answer for `>=` and `<=` against a date literal, such as `effectiveDateTime >= @2026-03-14`, while `>`, `<` and `=` work. `effectiveDateTime.toDate() >= @2026-03-14` works and also handles date-times, so the docs use that form. A test pins the bug so an upstream fix is noticed.
 
-Dashboard and analytics queries belong to the warehouse in sub-project 6. For a vault with Git, it is built from the last commit so unreviewed changes stay out.
+The FHIR browser reads the same working files, so it shows uncommitted records. There is no warehouse for now, since querying the local files is enough.
 
 ## Interfaces
 
@@ -219,7 +221,7 @@ phv replace Type/id FILE|- [--dry-run]
 phv rm Type/id
 phv get Type/id
 phv list Type [--where EXPR]
-phv source add FILE
+phv source add FILE [--category CATEGORY]
 phv check
 phv serve [--port N]
 ```
@@ -228,7 +230,7 @@ phv serve [--port N]
 
 `phv check` validates every line, and checks line order, ID uniqueness, dangling references and that any attachment URL under `sources/` points to a file that exists. A `DocumentReference` with no file in `sources/`, such as a clinical note from another system, is fine. It reports problems and changes nothing. After a manual Git merge, this is the way to confirm the vault is sound. A write refuses to touch a file that is out of order and points to `phv check`, rather than quietly rewriting it.
 
-`--json` gives machine-readable output on every command. Exit codes follow fhir-pipes: 0 for success, 1 when validation or `phv check` finds problems or a runtime failure occurs, and 2 for an error that can be fixed before retrying, such as a bad flag, malformed JSON or a missing vault.
+`--json` gives machine-readable output on every command. Exit codes are 0 for success, 1 when validation or `phv check` finds problems or a runtime failure occurs, and 2 for an error that can be fixed before retrying, such as a bad flag, malformed JSON or a missing vault.
 
 ### REST API
 
@@ -328,7 +330,6 @@ Termbox's docs say authentication is coming soon, and they give no statement on 
 - **Interfaces:** CLI and API give the same results for the same input. The API rejects bad `Host` and `Origin` headers.
 - **MCP:** a real stdio session lists the tools, uploads a document, writes linked records, keeps decimals exact, returns problems as tool errors, and offers no removal.
 - **Setup:** runs with no `git` on `PATH`, with Git declined, and with a fake `gh`. The GitHub repo is only created on an explicit yes and is always private. A second family member gets a separate vault.
-- **fhir-pipes compatibility:** CI runs `fhir-pipes views run` over a sample vault's `records/` directory.
 - **Build guard:** `cargo tree` check for HTTP clients and SQLite.
 
 Test data is synthetic. Real health data never goes in this repo.
@@ -342,7 +343,7 @@ Each gets its own spec and plan.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus limits on what an MCP session can read.
 4. **Summaries:** IPS documents and narratives. The IPS part is designed in [IPS generation](2026-11-06-ips-design.md). Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
-6. **Warehouse and dashboard (on hold):** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload. `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
+6. **Browser:** a local FHIR browser, designed in `2026-11-06-fhir-browser-design.md`, that queries the vault's files directly, with charts for activity and no web input. A warehouse is on hold, since querying the local files is enough, so CI no longer checks `fhir-pipes`. If one returns, add that check back. Also, `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
 
 ### Notes for the importer sub-project
 

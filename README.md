@@ -10,7 +10,7 @@ phv keeps your health records as FHIR R4 files on your own machine. AI can help 
 
 ## Status
 
-Early development. It runs on a laptop only. The main ways in are `phv setup`, the MCP server (`phv mcp`) and the lab skill. `phv import apple-activity` imports Apple activity exports, and `phv ips` builds an International Patient Summary. There is no web dashboard or health memory yet.
+Early development. It runs on a laptop only. The main ways in are `phv setup`, the MCP server (`phv mcp`) and the lab skill. `phv import apple-activity` imports Apple activity exports, and `phv import x12-835` turns insurance remittance files into claim records, and `phv ips` builds an International Patient Summary. `cargo run --release --example browser` starts a local read-only web browser for your records, on `127.0.0.1:8747`. There is no health memory or IPS generation yet.
 
 ## Install
 
@@ -94,6 +94,8 @@ Claude stores the original file, maps the results to FHIR and shows you what it 
 ```bash
 claude mcp add --scope user phv-maya -- phv --vault maya mcp
 ```
+
+If you installed Rust with asdf, use the full path from `asdf which phv` in place of `phv`, because asdf's shim only works in folders with a Rust version set.
 
 Start a new Claude Code session, then check that it connected with `/mcp`. You can then ask things like "add this lab report: /path/to/report.pdf" or "what was my last creatinine?". Use a full path for a document.
 

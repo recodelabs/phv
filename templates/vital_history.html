@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}{{ name }}{% endblock %}
+{% block main %}
+{% let vault = &chrome.vault %}
+<h1>{{ name }}</h1>
+<p class="sub"><a href="/v/{{ chrome.vault }}/vitals">Vitals</a></p>
+{% include "history_table.html" %}
+{% endblock %}

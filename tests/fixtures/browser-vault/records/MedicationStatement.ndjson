@@ -1,0 +1,1 @@
+{"resourceType":"MedicationStatement","id":"statement-levothyroxine","dosage":[{"text":"One tablet each morning"}],"effectiveDateTime":"2019-08-01","medicationCodeableConcept":{"text":"Levothyroxine 50 mcg"},"status":"active","subject":{"reference":"Patient/patient-maya"}}
