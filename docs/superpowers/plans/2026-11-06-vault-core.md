@@ -1975,6 +1975,8 @@ async fn an_unresolved_urn_reference_is_rejected() {
     let mut r = lab(&patient, "1.50");
     r["basedOn"] = json!([{"reference":"urn:uuid:99999999-9999-4999-8999-999999999999"}]);
     assert!(matches!(phv.add(&r, &AddOptions::default()).await.unwrap_err(), PhvError::Conflict(_)));
+    r["basedOn"] = json!([{"reference":"urn:oid:1.2.3"}]);
+    assert!(matches!(phv.add(&r, &AddOptions::default()).await.unwrap_err(), PhvError::Conflict(_)));
 }
 
 #[tokio::test]
@@ -2172,7 +2174,7 @@ impl Phv {
         for resource in resources {
             let from = resource_ref(resource);
             for reference in collect_refs(resource) {
-                if reference.starts_with("urn:uuid:") {
+                if reference.starts_with("urn:") {
                     issues.push(Issue::error("PHV-REF", &from, format!("{reference} is not in this submission")));
                 } else if let Some((target_type, target_id)) = local_target(&reference) {
                     if submitted.contains(&reference) {
@@ -2970,7 +2972,7 @@ impl Phv {
         let known: HashMap<String, ()> = parsed.iter().map(|(_, r)| (resource_ref(r), ())).collect();
         for (location, resource) in &parsed {
             for reference in collect_refs(resource) {
-                if reference.starts_with("urn:uuid:") || (local_target(&reference).is_some() && !known.contains_key(&reference)) {
+                if reference.starts_with("urn:") || (local_target(&reference).is_some() && !known.contains_key(&reference)) {
                     issues.push(Issue::error("PHV-REF", location, format!("{reference} does not resolve")));
                 }
             }

@@ -120,10 +120,10 @@ The synthetic lines were very similar, so real data will compress less well.
 
 ## Resource IDs
 
-An ID is the first 32 hex characters of the SHA-256 of the canonical resource with `id` and volatile `meta` fields removed, prefixed with the resource type before hashing. A reference to another resource in the same submission is hashed as that resource's own derived ID, repeated until the IDs stop changing or for as many rounds as there are resources, which bounds circular references. So an ID does not depend on temporary names chosen by the mapper, and two reports that differ only in which results they point to stay separate.
+An ID is the first 32 hex characters of the SHA-256 of the canonical resource with `id` and volatile `meta` fields removed, prefixed with the resource type before hashing. A reference to another resource in the same submission is hashed as that resource's own derived ID, working up from resources that reference nothing else in the submission. A reference that can't be resolved this way, because it is in or leads to a circular reference, is hashed as a fixed `Type/#` token. So an ID does not depend on temporary names, entry order or submission size, and two reports that differ only in which results they point to stay separate.
 
 - Adding the same content twice gives the same ID and changes nothing.
-- Two truly identical resources in one submission collapse into one. If two different resources ever end up with one ID, the submission is rejected, so nothing is lost silently.
+- Two truly identical resources in one submission collapse into one. If two different resources end up with one ID, which can happen when they differ only in a circular reference, the submission is rejected, so nothing is lost silently.
 - A resource keeps its ID when replaced.
 - Adding content that matches a stored ID but differs from the stored record is a conflict, not `unchanged`. This happens when the record has been replaced. `Provenance` is the exception, because a repeated add gives the same ID with a later time.
 - Known limit: after a replace, adding the new content creates a second record, because its hash gives a new ID. Correct records with `phv replace` until stable IDs arrive in sub-project 5.
@@ -133,10 +133,10 @@ An ID is the first 32 hex characters of the SHA-256 of the canonical resource wi
 
 AI skills and other callers submit FHIR JSON. phv treats it as untrusted.
 
-1. **Parse** one resource or a Bundle of type `transaction` or `collection`. Only `entry.resource` and `entry.fullUrl` are read from a Bundle. JSON with a repeated key in any object is rejected, because a parser would otherwise silently keep the last value.
+1. **Parse** one resource or a Bundle of type `transaction` or `collection`. Only `entry.resource` and `entry.fullUrl` are read from a Bundle. JSON with a repeated key in any object is rejected, because a parser would otherwise silently keep the last value. A Bundle with no entries, a Bundle inside a Bundle, and two entries sharing a local name are rejected too.
 2. **Assign IDs** and rewrite references to `urn:uuid:` full URLs and temporary IDs within the submission.
 3. **Validate** every resource, as described below. Any error rejects the whole submission and writes nothing.
-4. **Check references.** A relative `Type/id` reference must resolve in the submission or the vault. Absolute URLs and `#contained` references are left alone. A vault holds at most one `Patient`.
+4. **Check references.** A relative `Type/id` reference must resolve in the submission or the vault. A `urn:` reference left over after rewriting can never resolve, so it is rejected. Other absolute URLs and `#contained` references are left alone. A vault holds at most one `Patient`.
 5. **Add Provenance** when a source is given, as described below.
 6. **Write** under the lock. Each affected file is written to a temporary file in the same directory, flushed, then renamed over the original.
 
