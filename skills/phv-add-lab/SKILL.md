@@ -57,8 +57,8 @@ The first result is often wrong: searching `creatinine` alone returns ratios and
 
 - Ignore codes starting with `LP`, which are parts rather than tests, along with `Deprecated` entries, panels, and survey or value set entries such as `HEDIS` and `PhenX`.
 - Match the test, specimen and unit. A creatinine reported in `mg/dL` is `[Mass/volume]` (`2160-0`), while one in `umol/L` is `[Moles/volume]` (`14682-9`).
-- If the report does not print the specimen, do not assume one. Ask the person, or leave the code out.
-- Search with other words if nothing fits, because search matches words and does not understand synonyms.
+- If the report does not print the specimen, do not assume one. Ask the person once for the whole report, such as "Were these blood tests, and do you know if they used serum or plasma?", and apply the answer to every test it covers. If they don't know, leave those codes out.
+- Search with other words if nothing fits, because search matches words and does not understand synonyms. Add the specimen and what was measured: `glucose` alone mostly returns enzymes and ratios, while `glucose serum plasma` is closer.
 
 Confirm the code you chose, and use the `display` it returns:
 
@@ -69,7 +69,7 @@ curl -s -G 'https://tx.health-samurai.io/fhir/r4/CodeSystem/$validate-code' \
   --data-urlencode 'code=2160-0'
 ```
 
-If several codes fit, nothing fits, or Termbox is unavailable, keep `code.text` alone and tell the person. A missing code never blocks adding a result.
+If several codes fit, nothing fits, or Termbox is unavailable, keep `code.text` alone and tell the person which tests have no code and why. A missing code never blocks adding a result.
 
 ### 4. Write a Bundle
 
