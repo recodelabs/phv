@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust 1.99.1, Axum 0.8, Askama 0.16, htmx 2.0.11 (embedded in the binary), and the existing `phv::store` and `phv::canon`.
 
-**Status on 2026-11-06:** Tasks 1 to 11 are done, and code review findings are fixed. Task 12 is done except Step 6 (`category` in the API), which waits on vault-core Task 12. Task 13 waits on the same task. HealthKit upload and an Activity topic are deferred at the user's request.
+**Status on 2026-11-06:** Tasks 1 to 11 are done, and code review findings are fixed. Task 12 is done except Step 6 (`category` in the API). Task 13 is not done, so `examples/browser.rs` still starts the browser. The Activity page, its tabs and its calendar were added after this plan, and are described in the spec. HealthKit upload is deferred.
 
 **How far this has been checked:** Tasks 1 to 11 were replayed in order in a clean clone before this plan was written. Each task's tests passed at its own stage, and the end state passed the full suite, clippy with warnings denied, and `cargo fmt --check`. Tasks 12 and 13 depend on `vault-core` code that did not exist yet, so **they were not compiled**. Check them against the merged code.
 
@@ -16,7 +16,7 @@
 
 ## Working here
 
-- Work in the worktree `/Users/mberg/github/phv/.worktrees/fhir-browser`, on branch `fhir-browser`.
+- Work on branch `fhir-browser`.
 - Commit only on this branch, and do not push unless asked.
 - End every commit message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Test data must stay synthetic. Real health data never goes in this repo.
