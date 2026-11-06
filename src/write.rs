@@ -1,8 +1,8 @@
 //! The write path. Every write takes the lock, validates everything, then writes.
 
-use crate::canon::{canon_resource, strip_volatile};
+use crate::canon::{canon_resource, parse_json, strip_volatile};
 use crate::error::{Issue, PhvError};
-use crate::refs::{collect_refs, local_target};
+use crate::refs::{ReferenceKind, collect_refs, reference_kind};
 use crate::source::build_provenance;
 use crate::store::{Change, Vault, line_id};
 use crate::submission::prepare;
@@ -70,51 +70,61 @@ impl Phv {
         for resource in resources {
             let from = resource_ref(resource);
             for reference in collect_refs(resource) {
-                if reference.starts_with("urn:") {
-                    issues.push(Issue::error(
+                match reference_kind(&reference) {
+                    ReferenceKind::External => {}
+                    ReferenceKind::Unresolvable => issues.push(Issue::error(
                         "PHV-REF",
                         &from,
                         format!("{reference} is not in this submission"),
-                    ));
-                } else if let Some((target_type, target_id)) = local_target(&reference) {
-                    if submitted.contains(&reference) {
-                        continue;
-                    }
-                    if !vault_ids.contains_key(target_type) {
-                        let ids = self
-                            .vault
-                            .lines(target_type)?
-                            .iter()
-                            .filter_map(|l| line_id(l).map(str::to_string))
-                            .collect();
-                        vault_ids.insert(target_type.to_string(), ids);
-                    }
-                    if !vault_ids[target_type].contains(target_id) {
-                        issues.push(Issue::error(
-                            "PHV-REF",
-                            &from,
-                            format!("{reference} is not in the vault or this submission: include it, point to an existing resource, or use display only"),
-                        ));
+                    )),
+                    ReferenceKind::Malformed => issues.push(Issue::error(
+                        "PHV-REF",
+                        &from,
+                        format!("{reference} is not a valid reference: use Type/id, a fragment, an absolute URL, or display only"),
+                    )),
+                    ReferenceKind::Local(target_type, target_id) => {
+                        if submitted.contains(&reference) {
+                            continue;
+                        }
+                        if !vault_ids.contains_key(target_type) {
+                            let ids = self
+                                .vault
+                                .lines(target_type)?
+                                .iter()
+                                .filter_map(|l| line_id(l).map(str::to_string))
+                                .collect();
+                            vault_ids.insert(target_type.to_string(), ids);
+                        }
+                        if !vault_ids[target_type].contains(target_id) {
+                            issues.push(Issue::error(
+                                "PHV-REF",
+                                &from,
+                                format!("{reference} is not in the vault or this submission: include it, point to an existing resource, or use display only"),
+                            ));
+                        }
                     }
                 }
             }
         }
 
-        let mut patients: HashSet<String> = self
-            .vault
-            .lines("Patient")?
-            .iter()
-            .filter_map(|l| line_id(l).map(str::to_string))
-            .collect();
-        for resource in resources.iter().filter(|r| r["resourceType"] == "Patient") {
-            patients.insert(resource["id"].as_str().unwrap_or("").to_string());
-        }
-        if patients.len() > 1 {
-            issues.push(Issue::error(
-                "PHV-PATIENT",
-                "Patient",
-                "a vault holds one person: use phv replace to update the existing Patient",
-            ));
+        // Only a submitted Patient can make a second one, so a hand-edited vault can still take other records.
+        if resources.iter().any(|r| r["resourceType"] == "Patient") {
+            let mut patients: HashSet<String> = self
+                .vault
+                .lines("Patient")?
+                .iter()
+                .filter_map(|l| line_id(l).map(str::to_string))
+                .collect();
+            for resource in resources.iter().filter(|r| r["resourceType"] == "Patient") {
+                patients.insert(resource["id"].as_str().unwrap_or("").to_string());
+            }
+            if patients.len() > 1 {
+                issues.push(Issue::error(
+                    "PHV-PATIENT",
+                    "Patient",
+                    "a vault holds one person: use phv replace to update the existing Patient",
+                ));
+            }
         }
         Ok(issues)
     }
@@ -128,7 +138,7 @@ impl Phv {
     }
 
     pub async fn add(&self, input: &Value, options: &AddOptions) -> Result<WriteReport, PhvError> {
-        let _lock = self.vault.lock()?;
+        let _lock = self.vault.lock_async().await?;
         let mut resources = prepare(input)?;
 
         if let Some(sha256) = &options.source {
@@ -179,14 +189,16 @@ impl Phv {
                 Some(_) => conflicts.push(Issue::error(
                     "PHV-REPLACED",
                     &reference,
-                    "the stored record was changed by phv replace and differs from this content: use phv replace to change it again",
+                    "the stored record differs from this content, because it may have been replaced or edited: use phv replace to change it",
                 )),
             }
         }
         if !conflicts.is_empty() {
             return Err(PhvError::Conflict(conflicts));
         }
-        if !options.dry_run {
+        if options.dry_run {
+            self.vault.check_changes(&changes)?;
+        } else {
             self.vault.apply(&changes)?;
         }
         Ok(report)
@@ -199,7 +211,7 @@ impl Phv {
         input: &Value,
         dry_run: bool,
     ) -> Result<WriteReport, PhvError> {
-        let _lock = self.vault.lock()?;
+        let _lock = self.vault.lock_async().await?;
         let Some(existing) = self.vault.get(resource_type, id)? else {
             return Err(PhvError::NotFound(format!("{resource_type}/{id}")));
         };
@@ -237,30 +249,44 @@ impl Phv {
             return Ok(report);
         }
         report.updated.push(reference);
-        if !dry_run {
-            self.vault.apply(&[Change::Upsert {
-                resource_type: resource_type.into(),
-                id: id.into(),
-                line,
-            }])?;
+        let changes = [Change::Upsert {
+            resource_type: resource_type.into(),
+            id: id.into(),
+            line,
+        }];
+        if dry_run {
+            self.vault.check_changes(&changes)?;
+        } else {
+            self.vault.apply(&changes)?;
         }
         Ok(report)
     }
 
     pub async fn remove(&self, resource_type: &str, id: &str) -> Result<(), PhvError> {
-        let _lock = self.vault.lock()?;
+        let _lock = self.vault.lock_async().await?;
         if self.vault.get(resource_type, id)?.is_none() {
             return Err(PhvError::NotFound(format!("{resource_type}/{id}")));
         }
-        let needle = format!("\"reference\":\"{resource_type}/{id}\"");
+        let target = format!("{resource_type}/{id}");
         let mut users = Vec::new();
         for other_type in self.vault.resource_types()? {
-            for line in self.vault.lines(&other_type)? {
-                if line.contains(&needle) {
+            for (position, line) in self.vault.lines(&other_type)?.iter().enumerate() {
+                if other_type == resource_type && line_id(line) == Some(id) {
+                    continue;
+                }
+                // Read the line as JSON, so spacing and escapes like `\/` cannot hide a reference.
+                let Ok(value) = parse_json(line) else {
+                    return Err(PhvError::Conflict(vec![Issue::error(
+                        "PHV-LINE",
+                        format!("records/{other_type}.ndjson:{}", position + 1),
+                        "this line is not valid JSON, so phv cannot tell whether it references the resource being removed: fix the line first",
+                    )]));
+                };
+                if collect_refs(&value).contains(&target) {
                     users.push(Issue::error(
                         "PHV-IN-USE",
-                        format!("{other_type}/{}", line_id(&line).unwrap_or("?")),
-                        format!("references {resource_type}/{id}"),
+                        format!("{other_type}/{}", line_id(line).unwrap_or("?")),
+                        format!("references {target}: use phv replace to drop the reference first"),
                     ));
                 }
             }

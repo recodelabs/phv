@@ -291,3 +291,195 @@ async fn validate_submission_reports_problems_without_writing() {
             .any(|i| i.code == "PHV-REF")
     );
 }
+
+fn write_records(phv: &phv::write::Phv, resource_type: &str, text: &str) {
+    std::fs::write(
+        phv.vault()
+            .root()
+            .join(format!("records/{resource_type}.ndjson")),
+        text,
+    )
+    .unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_waiting_write_does_not_block_the_runtime() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let phv = std::sync::Arc::new(phv);
+    let guard = phv.vault().lock_async().await.unwrap();
+    let other = phv.clone();
+    let task = tokio::spawn(async move {
+        other
+            .add(&lab(&patient, "1.50"), &AddOptions::default())
+            .await
+    });
+    for _ in 0..20 {
+        tokio::task::yield_now().await;
+    }
+    assert!(!task.is_finished());
+    drop(guard);
+    task.await.unwrap().unwrap();
+    assert_eq!(records(&phv, "Observation").lines().count(), 1);
+}
+
+#[tokio::test]
+async fn remove_finds_references_written_with_spaces_or_escapes() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let id = patient.split_once('/').unwrap().1.to_string();
+    for (n, reference) in [patient.clone(), patient.replace('/', "\\/")]
+        .iter()
+        .enumerate()
+    {
+        write_records(
+            &phv,
+            "Observation",
+            &format!(
+                "{{\"resourceType\":\"Observation\",\"id\":\"o1\",\"subject\":{{\"reference\": \"{reference}\"}}}}\n"
+            ),
+        );
+        let err = phv.remove("Patient", &id).await.unwrap_err();
+        assert!(matches!(err, PhvError::Conflict(_)), "{n}: {err:?}");
+        assert_ne!(records(&phv, "Patient"), "");
+    }
+    write_records(
+        &phv,
+        "Observation",
+        &format!(
+            "{{\"resourceType\":\"Observation\",\"id\":\"o1\",\"subject\":{{\"reference\":\"{patient}\"}}}}\n"
+        ),
+    );
+    assert!(matches!(
+        phv.remove("Patient", &id).await.unwrap_err(),
+        PhvError::Conflict(_)
+    ));
+}
+
+#[tokio::test]
+async fn remove_refuses_when_a_stored_line_cannot_be_read() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    write_records(
+        &phv,
+        "Observation",
+        "{\"resourceType\":\"Observation\",\"id\":\"o1\",\n",
+    );
+    let err = phv
+        .remove("Patient", patient.split_once('/').unwrap().1)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)), "{err:?}");
+    let issue = &err.issues()[0];
+    assert!(
+        issue.path.contains("Observation.ndjson") && issue.path.contains('1'),
+        "{issue:?}"
+    );
+}
+
+#[tokio::test]
+async fn remove_ignores_a_self_reference_but_refuses_a_cycle() {
+    let (_d, phv) = phv().await;
+    write_records(
+        &phv,
+        "Observation",
+        "{\"resourceType\":\"Observation\",\"id\":\"o1\",\"hasMember\":[{\"reference\":\"Observation/o1\"}]}\n",
+    );
+    phv.remove("Observation", "o1").await.unwrap();
+    assert_eq!(records(&phv, "Observation"), "");
+
+    write_records(
+        &phv,
+        "Observation",
+        concat!(
+            "{\"resourceType\":\"Observation\",\"id\":\"o1\",\"hasMember\":[{\"reference\":\"Observation/o2\"}]}\n",
+            "{\"resourceType\":\"Observation\",\"id\":\"o2\",\"hasMember\":[{\"reference\":\"Observation/o1\"}]}\n"
+        ),
+    );
+    let err = phv.remove("Observation", "o1").await.unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)), "{err:?}");
+    assert!(err.issues()[0].message.contains("phv replace"), "{err:?}");
+}
+
+#[tokio::test]
+async fn malformed_relative_references_are_rejected() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    for bad in [
+        "patient/abc",
+        "Patient/john_doe",
+        "Patient/abc/_history/1",
+        "Patient/",
+        "Patient",
+        "../x/abc",
+        "Patient/x y",
+    ] {
+        let mut r = lab(&patient, "1.50");
+        r["basedOn"] = json!([{"reference": bad}]);
+        let err = phv.add(&r, &AddOptions::default()).await.unwrap_err();
+        assert!(matches!(err, PhvError::Conflict(_)), "{bad}: {err:?}");
+        assert!(err.issues().iter().any(|i| i.code == "PHV-REF"), "{bad}");
+    }
+    assert_eq!(records(&phv, "Observation"), "");
+    let mut r = lab(&patient, "1.50");
+    r["basedOn"] = json!([{"reference":"#c1"}]);
+    r["performer"] = json!([{"reference":"https://example.org/fhir/Organization/1"}]);
+    r["contained"] = json!([{"resourceType":"Organization","id":"c1","name":"Example Labs"}]);
+    phv.add(&r, &AddOptions::default()).await.unwrap();
+}
+
+#[tokio::test]
+async fn dry_run_reports_a_write_that_would_fail() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let dry = AddOptions {
+        dry_run: true,
+        ..AddOptions::default()
+    };
+
+    let crlf = "{\"resourceType\":\"Observation\",\"id\":\"a\"}\r\n";
+    write_records(&phv, "Observation", crlf);
+    assert!(matches!(
+        phv.add(&lab(&patient, "1.50"), &dry).await.unwrap_err(),
+        PhvError::Conflict(_)
+    ));
+    assert!(matches!(
+        phv.replace("Observation", "a", &lab(&patient, "1.50"), true)
+            .await
+            .unwrap_err(),
+        PhvError::Conflict(_)
+    ));
+    assert_eq!(records(&phv, "Observation"), crlf);
+
+    let unsorted = "{\"resourceType\":\"Observation\",\"id\":\"b\"}\n{\"resourceType\":\"Observation\",\"id\":\"a\"}\n";
+    write_records(&phv, "Observation", unsorted);
+    assert!(matches!(
+        phv.add(&lab(&patient, "1.50"), &dry).await.unwrap_err(),
+        PhvError::Conflict(_)
+    ));
+    assert!(matches!(
+        phv.replace("Observation", "a", &lab(&patient, "1.50"), true)
+            .await
+            .unwrap_err(),
+        PhvError::Conflict(_)
+    ));
+    assert_eq!(records(&phv, "Observation"), unsorted);
+}
+
+#[tokio::test]
+async fn the_one_patient_rule_applies_only_when_a_patient_is_submitted() {
+    let (_d, phv) = phv().await;
+    write_records(
+        &phv,
+        "Patient",
+        "{\"resourceType\":\"Patient\",\"id\":\"p1\"}\n{\"resourceType\":\"Patient\",\"id\":\"p2\"}\n",
+    );
+    phv.add(&lab("Patient/p1", "1.50"), &AddOptions::default())
+        .await
+        .unwrap();
+    let other = json!({"resourceType":"Patient","name":[{"family":"Other"}]});
+    assert!(matches!(
+        phv.add(&other, &AddOptions::default()).await.unwrap_err(),
+        PhvError::Conflict(_)
+    ));
+}
