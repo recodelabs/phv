@@ -1,0 +1,10 @@
+/target/
+.DS_Store
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Personal health data never belongs in this public repo
+/records/
+/sources/
+/phv.toml
