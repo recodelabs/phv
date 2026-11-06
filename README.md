@@ -95,6 +95,8 @@ Claude stores the original file, maps the results to FHIR and shows you what it 
 claude mcp add --scope user phv-maya -- phv --vault maya mcp
 ```
 
+If you installed Rust with asdf, use the full path from `asdf which phv` in place of `phv`, because asdf's shim only works in folders with a Rust version set.
+
 Start a new Claude Code session, then check that it connected with `/mcp`. You can then ask things like "add this lab report: /path/to/report.pdf" or "what was my last creatinine?". Use a full path for a document.
 
 | Tool | What it does |
