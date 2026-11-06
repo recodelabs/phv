@@ -102,7 +102,7 @@ Rules:
 4. phv keeps no manifest, index or timestamp file in the data repo.
 5. Any change to the format needs a new `format_version` and an explicit migration command. No ordinary command reformats existing lines.
 
-Full rebuilds are for the analytics warehouse only, which is generated and stays out of Git.
+Nothing in phv needs a full rebuild.
 
 We checked this against a real Git repo with a synthetic file of 100,000 resources (32 MB), rewriting the whole file for every change:
 
