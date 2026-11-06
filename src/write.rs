@@ -33,8 +33,6 @@ pub struct WriteReport {
 pub struct Phv {
     vault: Vault,
     pub(crate) validator: Validator,
-    /// Built on the first IPS, so other commands don't pay for the IPS profiles.
-    pub(crate) ips_validator: tokio::sync::OnceCell<crate::ips::IpsValidator>,
 }
 
 pub(crate) fn resource_ref(resource: &Value) -> String {
@@ -50,7 +48,6 @@ impl Phv {
         Ok(Self {
             vault,
             validator: Validator::new().await?,
-            ips_validator: tokio::sync::OnceCell::new(),
         })
     }
 
