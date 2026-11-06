@@ -93,7 +93,13 @@ pub(crate) fn build_provenance(
     let stored = vault
         .get("DocumentReference", &document)?
         .ok_or_else(not_found)?;
-    let stored: Value = serde_json::from_str(&stored).map_err(|_| not_found())?;
+    let stored: Value = serde_json::from_str(&stored).map_err(|_| {
+        PhvError::Conflict(vec![Issue::error(
+            "PHV-SOURCE-URL",
+            format!("DocumentReference/{document}"),
+            "the stored record for this source cannot be read: run phv check",
+        )])
+    })?;
     let matches_hash = stored["identifier"]
         .as_array()
         .is_some_and(|ids| ids.iter().any(|i| i["value"].as_str() == Some(sha256)));
@@ -183,7 +189,7 @@ impl Phv {
     }
 
     /// Rewrites the stored file when it is missing or its hash differs from this upload.
-    /// The record's `url` is untrusted, so it must stay inside `sources/`.
+    /// The record's `url` is untrusted, so only this file's own `sources/<sha256>.<ext>` is ever written.
     fn restore_if_lost(
         &self,
         reference: &str,
@@ -199,15 +205,20 @@ impl Phv {
         let url = record["content"][0]["attachment"]["url"]
             .as_str()
             .ok_or_else(|| refuse("the stored record has no attachment url"))?;
-        let inside = url
-            .strip_prefix("sources/")
-            .is_some_and(|rest| !rest.is_empty());
-        if !inside || url.contains("..") || url.contains('\\') {
-            return Err(refuse("the stored attachment url is not inside sources/"));
+        // `source_add` only ever writes `sources/<sha256>.<ext>`, so nothing else is followed.
+        let own_name = url
+            .strip_prefix(&format!("sources/{sha256}."))
+            .is_some_and(|ext| !ext.is_empty() && ext.bytes().all(|b| b.is_ascii_alphanumeric()));
+        if !own_name {
+            return Err(refuse(
+                "the stored attachment url is not sources/<sha256>.<extension> for this file",
+            ));
         }
         let path = self.vault().root().join(url);
-        let intact = match std::fs::read(&path) {
-            Ok(current) => sha256_hex(&current) == sha256,
+        // A symlink, FIFO or folder is never read: it counts as lost and is replaced.
+        let intact = match std::fs::symlink_metadata(&path) {
+            Ok(meta) if meta.file_type().is_file() => sha256_hex(&std::fs::read(&path)?) == sha256,
+            Ok(_) => false,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
             Err(e) => return Err(e.into()),
         };

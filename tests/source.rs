@@ -309,3 +309,142 @@ async fn a_multibyte_name_past_the_cap_does_not_panic() {
     assert_eq!(title.chars().count(), 255);
     assert!(title.chars().all(|c| c == 'é'));
 }
+
+fn edit_document_reference(phv: &phv::write::Phv, from: &str, to: &str) {
+    let file = phv.vault().root().join("records/DocumentReference.ndjson");
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains(from), "{text}");
+    std::fs::write(&file, text.replace(from, to)).unwrap();
+}
+
+#[tokio::test]
+async fn a_url_pointing_at_another_sources_file_is_refused_and_that_file_survives() {
+    let (_d, phv) = phv().await;
+    let a = phv.source_add("a.pdf", PDF).await.unwrap();
+    let other = b"%PDF-1.4 a different synthetic file";
+    let b = phv.source_add("b.pdf", other).await.unwrap();
+    edit_document_reference(
+        &phv,
+        &format!("sources/{}.pdf", a.sha256),
+        &format!("sources/{}.pdf", b.sha256),
+    );
+
+    let err = phv.source_add("a.pdf", PDF).await.unwrap_err();
+    match &err {
+        PhvError::Conflict(issues) => assert_eq!(issues[0].code, "PHV-SOURCE-URL"),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(std::fs::read(stored_path(&phv, &b.sha256)).unwrap(), other);
+}
+
+#[tokio::test]
+async fn a_url_in_a_subfolder_of_sources_is_refused() {
+    let (_d, phv) = phv().await;
+    let a = phv.source_add("a.pdf", PDF).await.unwrap();
+    edit_document_reference(
+        &phv,
+        &format!("sources/{}.pdf", a.sha256),
+        &format!("sources/sub/{}.pdf", a.sha256),
+    );
+    let err = phv.source_add("a.pdf", PDF).await.unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)), "{err:?}");
+    assert!(!phv.vault().root().join("sources/sub").exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_url_through_a_symlinked_folder_writes_nothing_outside_the_vault() {
+    let (_d, phv) = phv().await;
+    let outside = tempfile::tempdir().unwrap();
+    let a = phv.source_add("a.pdf", PDF).await.unwrap();
+    std::os::unix::fs::symlink(outside.path(), phv.vault().root().join("sources/link")).unwrap();
+    edit_document_reference(
+        &phv,
+        &format!("sources/{}.pdf", a.sha256),
+        "sources/link/x.pdf",
+    );
+    std::fs::remove_file(stored_path(&phv, &a.sha256)).unwrap();
+
+    let err = phv.source_add("a.pdf", PDF).await.unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)), "{err:?}");
+    assert_eq!(outside.path().read_dir().unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_symlink_at_the_source_path_is_replaced_not_followed() {
+    let (_d, phv) = phv().await;
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("secret.txt");
+    std::fs::write(&target, b"outside data").unwrap();
+    let a = phv.source_add("a.pdf", PDF).await.unwrap();
+    let path = stored_path(&phv, &a.sha256);
+    std::fs::remove_file(&path).unwrap();
+    std::os::unix::fs::symlink(&target, &path).unwrap();
+
+    let again = phv.source_add("a.pdf", PDF).await.unwrap();
+    assert!(again.restored);
+    assert_eq!(std::fs::read(&target).unwrap(), b"outside data");
+    assert!(
+        std::fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_file()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), PDF);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_fifo_at_the_source_path_is_replaced_without_hanging() {
+    let (_d, phv) = phv().await;
+    let a = phv.source_add("a.pdf", PDF).await.unwrap();
+    let path = stored_path(&phv, &a.sha256);
+    std::fs::remove_file(&path).unwrap();
+    let status = std::process::Command::new("mkfifo")
+        .arg(&path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let again = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        phv.source_add("a.pdf", PDF),
+    )
+    .await
+    .expect("source_add hung on a FIFO")
+    .unwrap();
+    assert!(again.restored);
+    assert!(
+        std::fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_file()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), PDF);
+}
+
+#[tokio::test]
+async fn an_unreadable_stored_source_record_points_at_check_not_source_add() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let a = phv.source_add("a.pdf", PDF).await.unwrap();
+    edit_document_reference(&phv, r#""status":"current""#, r#""status":"#);
+
+    let err = phv
+        .add(&lab(&patient, "1.50"), &options(&a.sha256))
+        .await
+        .unwrap_err();
+    match &err {
+        PhvError::Conflict(issues) => {
+            assert_eq!(issues[0].code, "PHV-SOURCE-URL");
+            assert!(
+                issues[0].message.contains("phv check"),
+                "{}",
+                issues[0].message
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(records(&phv, "Observation"), "");
+}
