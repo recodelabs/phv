@@ -1,11 +1,13 @@
 //! All FHIR pages.
 
 use super::{App, Chrome, Ctx, PageError, not_found, render, run};
+use crate::browser::model::documents::source_of;
 use crate::browser::model::explorer::{
     RecordRow, RefRow, TypeCount, label_of, page_count, page_of, pretty_json, record_row,
-    references,
+    references, topic_of,
 };
 use crate::browser::model::parse_resource;
+use crate::browser::model::value::id_of;
 use askama::Template;
 use axum::{
     Router,
@@ -33,6 +35,12 @@ struct ListPage {
     pages: usize,
 }
 
+struct SourceLink {
+    title: String,
+    href: Option<String>,
+    agent: Option<String>,
+}
+
 #[derive(Template)]
 #[template(path = "fhir_record.html")]
 struct RecordPage {
@@ -42,6 +50,8 @@ struct RecordPage {
     label: String,
     json: String,
     references: Vec<RefRow>,
+    topic: Option<(&'static str, String)>,
+    source: Option<SourceLink>,
 }
 
 #[derive(Deserialize)]
@@ -102,6 +112,25 @@ async fn list(
     .await
 }
 
+fn source_link(cx: &mut Ctx, reference: &str) -> Result<Option<SourceLink>, PageError> {
+    let provenance = cx.records.of_type("Provenance")?;
+    let Some(source) = source_of(reference, &provenance) else {
+        return Ok(None);
+    };
+    let documents = cx.records.of_type("DocumentReference")?;
+    let document = documents.iter().find(|d| id_of(d) == source.document_id);
+    Ok(Some(SourceLink {
+        title: document.map_or_else(|| source.document_id.clone(), label_of),
+        href: document.map(|_| {
+            format!(
+                "/v/{}/fhir/DocumentReference/{}",
+                cx.vault_name, source.document_id
+            )
+        }),
+        agent: source.agent,
+    }))
+}
+
 async fn record(
     State(app): State<App>,
     Path((vault, resource_type, id)): Path<(String, String, String)>,
@@ -115,7 +144,9 @@ async fn record(
             .ok_or_else(|| not_found(format!("No {resource_type} with this id.")))?;
         let resource = parse_resource(&line, &resource_type)
             .ok_or_else(|| not_found("This record could not be read. Run phv check."))?;
+        let observations = cx.records.of_type("Observation")?;
         let vault_ref = cx.records.vault().clone();
+        let source = source_link(cx, &format!("{resource_type}/{id}"))?;
         render(RecordPage {
             chrome: cx.chrome()?,
             label: label_of(&resource),
@@ -123,6 +154,8 @@ async fn record(
             references: references(&resource, |kind, target| {
                 vault_ref.get(kind, target).is_ok_and(|line| line.is_some())
             }),
+            topic: topic_of(&resource, &observations),
+            source,
             resource_type,
             id,
         })

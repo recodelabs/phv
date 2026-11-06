@@ -1,7 +1,9 @@
-//! All FHIR: every record of every type.
+//! All FHIR: every record of every type, and the topic page that shows each one.
 
+use super::labs::{is_lab_observation, is_lab_report};
 use super::observation::clinical_date;
 use super::value::{concept_name, encode_segment, friendly_date, id_of};
+use super::vitals::is_vital;
 use crate::refs::{collect_refs, local_target};
 use serde_json::Value;
 
@@ -103,4 +105,23 @@ pub fn references(resource: &Value, exists: impl Fn(&str, &str) -> bool) -> Vec<
     rows.sort_by(|a, b| a.reference.cmp(&b.reference));
     rows.dedup();
     rows
+}
+
+/// The topic page a record shows up under, as a label and a path below the vault.
+pub fn topic_of(resource: &Value, observations: &[Value]) -> Option<(&'static str, String)> {
+    let simple = |label, path: &str| Some((label, path.to_string()));
+    match resource["resourceType"].as_str()? {
+        "Observation" if is_vital(resource) => simple("Vitals", "vitals"),
+        "Observation" if is_lab_observation(resource) => simple("Labs", "labs"),
+        "DiagnosticReport" if is_lab_report(resource, observations) => Some((
+            "Labs",
+            format!("labs/reports/{}", encode_segment(&id_of(resource))),
+        )),
+        "Condition" => simple("Conditions", "conditions"),
+        "MedicationStatement" | "MedicationRequest" => simple("Medicines", "medicines"),
+        "AllergyIntolerance" => simple("Allergies", "allergies"),
+        "Immunization" => simple("Vaccines", "vaccines"),
+        "DocumentReference" => simple("Documents", "documents"),
+        _ => None,
+    }
 }
