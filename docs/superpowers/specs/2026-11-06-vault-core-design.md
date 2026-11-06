@@ -120,10 +120,10 @@ The synthetic lines were very similar, so real data will compress less well.
 
 ## Resource IDs
 
-An ID is the first 32 hex characters of the SHA-256 of the canonical resource with `id` and volatile `meta` fields removed, prefixed with the resource type before hashing. References to other resources in the same submission are replaced with a fixed `Type/#` token before hashing, so an ID does not depend on temporary names chosen by the mapper.
+An ID is the first 32 hex characters of the SHA-256 of the canonical resource with `id` and volatile `meta` fields removed, prefixed with the resource type before hashing. A reference to another resource in the same submission is hashed as that resource's own derived ID, repeated until the IDs stop changing or for as many rounds as there are resources, which bounds circular references. So an ID does not depend on temporary names chosen by the mapper, and two reports that differ only in which results they point to stay separate.
 
 - Adding the same content twice gives the same ID and changes nothing.
-- Two identical resources in one submission collapse into one.
+- Two truly identical resources in one submission collapse into one. If two different resources ever end up with one ID, the submission is rejected, so nothing is lost silently.
 - A resource keeps its ID when replaced.
 - Adding content that matches a stored ID but differs from the stored record is a conflict, not `unchanged`. This happens when the record has been replaced. `Provenance` is the exception, because a repeated add gives the same ID with a later time.
 - Known limit: after a replace, adding the new content creates a second record, because its hash gives a new ID. Correct records with `phv replace` until stable IDs arrive in sub-project 5.
