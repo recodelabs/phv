@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · phv</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<main>
+  <h1>{{ title }}</h1>
+  <p>{{ message }}</p>
+  <ul class="plain">
+    {% for name in &vaults %}<li><a href="/v/{{ name }}/overview">{{ name }}</a></li>{% endfor %}
+  </ul>
+</main>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ resource_type }}{% endblock %}
+{% block main %}
+<h1>{% if label.is_empty() %}{{ resource_type }}{% else %}{{ label }}{% endif %}</h1>
+<p class="sub">
+  <a href="/v/{{ chrome.vault }}/fhir/{{ resource_type }}">{{ resource_type }}</a> / {{ id }}
+</p>
+<pre>{{ json }}</pre>
+{% if !references.is_empty() %}
+<h2>References</h2>
+<ul class="plain">
+  {% for row in &references %}
+  <li>{% if let Some(target) = &row.target %}<a href="/v/{{ chrome.vault }}/fhir/{{ target }}">{{ row.reference }}</a>{% else %}{{ row.reference }}{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
