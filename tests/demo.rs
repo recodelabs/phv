@@ -54,11 +54,17 @@ fn the_demo_claim_files_store_as_documents() {
         assert_ok(&phv(&vault, &["source", "add", file.to_str().unwrap()]));
     }
     assert_ok(&phv(&vault, &["check"]));
-    assert_eq!(line_count(vault.join("records/DocumentReference.ndjson")), 18);
+    assert_eq!(
+        line_count(vault.join("records/DocumentReference.ndjson")),
+        18
+    );
 }
 
 #[test]
 fn the_demo_lab_draft_validates() {
     let (_d, vault) = new_vault();
-    assert_ok(&phv(&vault, &["validate", "demo/lab-2025-02-10/draft.fhir.json"]));
+    assert_ok(&phv(
+        &vault,
+        &["validate", "demo/lab-2025-02-10/draft.fhir.json"],
+    ));
 }
