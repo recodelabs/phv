@@ -45,21 +45,19 @@ impl Section {
         }
     }
 
-    /// The section's LOINC code and display.
+    /// The section's LOINC code and its current LOINC display, which the HL7 validator
+    /// checks against the terminology server.
     pub(crate) fn loinc(self) -> (&'static str, &'static str) {
         match self {
             Section::Problems => ("11450-4", "Problem list - Reported"),
             Section::Allergies => ("48765-2", "Allergies and adverse reactions Document"),
             Section::Medications => ("10160-0", "History of Medication use Narrative"),
-            Section::Immunizations => ("11369-6", "History of Immunization Narrative"),
-            Section::Results => (
-                "30954-2",
-                "Relevant diagnostic tests/laboratory data Narrative",
-            ),
+            Section::Immunizations => ("11369-6", "History of Immunization note"),
+            Section::Results => ("30954-2", "Relevant diagnostic tests/laboratory data note"),
             Section::Procedures => ("47519-4", "History of Procedures Document"),
-            Section::PastIllness => ("11348-0", "History of Past illness Narrative"),
-            Section::SocialHistory => ("29762-2", "Social history Narrative"),
-            Section::VitalSigns => ("8716-3", "Vital signs"),
+            Section::PastIllness => ("11348-0", "History of Past illness note"),
+            Section::SocialHistory => ("29762-2", "Social history note"),
+            Section::VitalSigns => ("8716-3", "Vital signs note"),
         }
     }
 

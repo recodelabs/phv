@@ -1,7 +1,7 @@
 {
   "entry": [
     {
-      "fullUrl": "urn:uuid:320948d0-c32a-50ad-be15-f90ebba9233c",
+      "fullUrl": "urn:uuid:9f69b416-571d-588f-8be7-9dc288ecfe6a",
       "resource": {
         "author": [
           {
@@ -9,7 +9,7 @@
           }
         ],
         "date": "2026-11-06T12:00:00Z",
-        "id": "497663f819894b267edd0f92e88b8306",
+        "id": "26d898a0d66ce0d062688abb5e0ea209",
         "meta": {
           "profile": [
             "http://hl7.org/fhir/uv/ips/StructureDefinition/Composition-uv-ips"
@@ -85,7 +85,7 @@
               "coding": [
                 {
                   "code": "11369-6",
-                  "display": "History of Immunization Narrative",
+                  "display": "History of Immunization note",
                   "system": "http://loinc.org"
                 }
               ]
@@ -106,7 +106,7 @@
               "coding": [
                 {
                   "code": "30954-2",
-                  "display": "Relevant diagnostic tests/laboratory data Narrative",
+                  "display": "Relevant diagnostic tests/laboratory data note",
                   "system": "http://loinc.org"
                 }
               ]
@@ -129,8 +129,29 @@
             "code": {
               "coding": [
                 {
+                  "code": "47519-4",
+                  "display": "History of Procedures Document",
+                  "system": "http://loinc.org"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:331118ea-ca3b-580d-bc76-df504c348e48"
+              }
+            ],
+            "text": {
+              "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><table><thead><tr><th>Item</th><th>Details</th><th>Date</th><th>Status</th></tr></thead><tbody><tr><td>Appendectomy</td><td></td><td>1995-03-02</td><td>completed</td></tr></tbody></table></div>",
+              "status": "generated"
+            },
+            "title": "History of procedures"
+          },
+          {
+            "code": {
+              "coding": [
+                {
                   "code": "11348-0",
-                  "display": "History of Past illness Narrative",
+                  "display": "History of Past illness note",
                   "system": "http://loinc.org"
                 }
               ]
@@ -150,8 +171,29 @@
             "code": {
               "coding": [
                 {
+                  "code": "29762-2",
+                  "display": "Social history note",
+                  "system": "http://loinc.org"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:b3aabc18-8fe9-57a9-aec0-99fc53e9a6ac"
+              }
+            ],
+            "text": {
+              "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><table><thead><tr><th>Item</th><th>Details</th><th>Date</th><th>Status</th></tr></thead><tbody><tr><td>Tobacco smoking status</td><td>Former smoker</td><td>2026-03-14</td><td>final</td></tr></tbody></table></div>",
+              "status": "generated"
+            },
+            "title": "Social history"
+          },
+          {
+            "code": {
+              "coding": [
+                {
                   "code": "8716-3",
-                  "display": "Vital signs",
+                  "display": "Vital signs note",
                   "system": "http://loinc.org"
                 }
               ]
@@ -400,6 +442,26 @@
       }
     },
     {
+      "fullUrl": "urn:uuid:331118ea-ca3b-580d-bc76-df504c348e48",
+      "resource": {
+        "code": {
+          "text": "Appendectomy"
+        },
+        "id": "f29c8a736889fcb56fd922d645aa3878",
+        "meta": {
+          "profile": [
+            "http://hl7.org/fhir/uv/ips/StructureDefinition/Procedure-uv-ips"
+          ]
+        },
+        "performedDateTime": "1995-03-02",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:79fa34c0-d2b8-5f90-a576-a15e1fc665a7"
+        }
+      }
+    },
+    {
       "fullUrl": "urn:uuid:c5c566a4-3092-5456-805e-0e8afff121d9",
       "resource": {
         "abatementDateTime": "1995-03-10",
@@ -424,6 +486,52 @@
         "resourceType": "Condition",
         "subject": {
           "reference": "urn:uuid:79fa34c0-d2b8-5f90-a576-a15e1fc665a7"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b3aabc18-8fe9-57a9-aec0-99fc53e9a6ac",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "social-history",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "72166-2",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Tobacco smoking status"
+        },
+        "effectiveDateTime": "2026-03-14",
+        "id": "8d4e8b415edb8b155b62216f341a5983",
+        "meta": {
+          "profile": [
+            "http://hl7.org/fhir/uv/ips/StructureDefinition/Observation-tobaccouse-uv-ips"
+          ]
+        },
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:79fa34c0-d2b8-5f90-a576-a15e1fc665a7"
+        },
+        "valueCodeableConcept": {
+          "coding": [
+            {
+              "code": "8517006",
+              "display": "Ex-smoker",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Former smoker"
         }
       }
     },
@@ -487,7 +595,7 @@
   ],
   "identifier": {
     "system": "urn:ietf:rfc:3986",
-    "value": "urn:uuid:18619682-5a68-54a0-a774-c49027574a15"
+    "value": "urn:uuid:7d70a7d1-d47d-53d8-931a-7f159098a282"
   },
   "resourceType": "Bundle",
   "timestamp": "2026-11-06T12:00:00Z",
