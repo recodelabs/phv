@@ -38,6 +38,8 @@ pub struct Export {
     pub workouts: Vec<Workout>,
     pub rejected: Vec<Rejected>,
     pub failures: Vec<Value>,
+    /// The summary's `through` date, which says how new the export is.
+    pub through: Option<NaiveDate>,
 }
 
 fn refuse(message: impl Into<String>) -> PhvError {
@@ -108,6 +110,18 @@ pub fn parse(text: &str) -> Result<Export, PhvError> {
         return Err(refuse(format!(
             "the export's summary does not match its rows ({seen_days} days and {seen_workouts} workouts found): export it again"
         )));
+    }
+    // Absent is allowed, but then the import cannot tell an old file from a new one.
+    if let Some(through) = summary.get("through") {
+        let parsed = through
+            .as_str()
+            .filter(|t| t.len() == 10)
+            .and_then(|t| NaiveDate::parse_from_str(t, "%Y-%m-%d").ok());
+        export.through = Some(parsed.ok_or_else(|| {
+            refuse(format!(
+                "the export's summary has a through date {through} that is not a date: export it again"
+            ))
+        })?);
     }
     if let Some(failures) = summary["failures"].as_array() {
         export.failures = failures.clone();

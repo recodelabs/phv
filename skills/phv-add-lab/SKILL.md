@@ -82,7 +82,7 @@ If several codes fit, nothing fits, or Termbox is unavailable, keep `code.text` 
 
 ## 5. Map to FHIR R4
 
-Write a `collection` Bundle to a temporary file outside the vault, with one DiagnosticReport per report and one Observation per result. Assign unique `urn:uuid:` fullUrls and use them for internal references. Link the report's `result` to every result Observation. A `transaction` Bundle would need a request method and URL in each entry, so don't label a resource-only collection as a transaction.
+Create a private temporary file with `BUNDLE=$(mktemp)`, never a fixed path such as `/tmp/bundle.json`, since health data shouldn't sit at a predictable shared path. Write a `collection` Bundle to it, with one DiagnosticReport per report and one Observation per result. Assign unique `urn:uuid:` fullUrls and use them for internal references. Link the report's `result` to every result Observation. A `transaction` Bundle would need a request method and URL in each entry, so don't label a resource-only collection as a transaction.
 
 ```json
 {
@@ -149,7 +149,7 @@ Write a `collection` Bundle to a temporary file outside the vault, with one Diag
 Compare every mapped value, unit, reference range and test name against the rendered source. Check row coverage, decimal precision, unique fullUrls, reference resolution and one value choice per Observation. Then validate:
 
 ```bash
-phv validate /tmp/bundle.json
+phv validate "$BUNDLE"
 ```
 
 Fix mapping errors without changing source facts, and validate again. If you cannot fix an error without changing what the document says, stop and tell the person. Warnings do not block a write, but report them. Say exactly which checks ran. A draft ends here, returning the Bundle and review table with unresolved items and validation status.
@@ -161,23 +161,26 @@ Show a table of each test, LOINC code and its display, value, unit, reference ra
 ## 8. Write
 
 ```bash
-phv add /tmp/bundle.json --source <sha256> --agent phv-add-lab
+phv add "$BUNDLE" --source <sha256> --agent phv-add-lab
 ```
 
 Let the library assign IDs and create provenance. Report what it created, left unchanged or rejected.
 
 ## 9. Finish
 
-Don't commit or push the vault automatically. If the vault has a `.git` folder, tell the person to review and commit it:
+Don't commit or push the vault automatically. If the vault has a `.git` folder, tell the person to review and commit it. `<vault>` is the vault's folder from `phv vaults`. Plain `git diff` shows nothing for a new file, so `add -N` comes first:
 
 ```bash
-git diff
-git add -A && git commit -m "Add lab results from YYYY-MM-DD"
+git -C <vault> status
+git -C <vault> add -N . && git -C <vault> diff
+git -C <vault> add -A && git -C <vault> commit -m "Add lab results from YYYY-MM-DD"
 ```
+
+Give them these with the real path filled in. Don't run the commit yourself.
 
 If it has no `.git` folder, tell them there is no history to undo this write, and that `phv replace` is the way to correct a record.
 
-Delete the temporary Bundle file, unless a draft was the requested result. It contains health data.
+Delete the temporary Bundle file with `rm -f "$BUNDLE"`, unless a draft was the requested result. It contains health data.
 
 ## FHIR references
 

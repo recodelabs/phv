@@ -195,8 +195,36 @@ async fn add_patient(root: &Path) -> Result<(), PhvError> {
     }
 }
 
-/// Returns true only if the vault now has a Git repo with its first commit.
+/// The path with symlinks and `..` resolved, or made absolute when it cannot be resolved.
+fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path)
+        .or_else(|_| std::path::absolute(path))
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Refuses a folder that is already registered, so a vault never gets a second name.
+fn refuse_registered_location(registry: &Registry, root: &Path) -> Result<(), PhvError> {
+    let wanted = canonical(root);
+    for (existing_name, existing_path) in &registry.vaults {
+        if canonical(existing_path) == wanted {
+            return Err(PhvError::Usage(format!(
+                "{} is already the vault {existing_name}: use phv --vault {existing_name}, or choose a new folder",
+                root.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Returns true only if setup made the vault's first commit.
 fn setup_git(root: &Path) -> Result<bool, PhvError> {
+    // Never commit into a repo that was already there: its records have not been reviewed.
+    if root.join(".git").exists() {
+        println!(
+            "\nThis folder already has a Git repo, so setup made no commit. Review the records with git status, then commit them yourself."
+        );
+        return Ok(false);
+    }
     println!("\nGit keeps a history of every change, so you can review and undo them.");
     if !succeeds("git", &["--version"], None) {
         println!(
@@ -320,6 +348,7 @@ pub async fn run(home: &Path) -> Result<(), PhvError> {
     };
 
     // Check the folder before creating or registering anything.
+    refuse_registered_location(&registry, &root)?;
     let vault = open_or_create(&root)?;
     registry.register(&name, vault.root())?;
     save_registry(home, &registry)?;

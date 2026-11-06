@@ -258,6 +258,20 @@ fn check_choices(
     };
     for (stem, element) in elements {
         if let Some(choices) = &element.choices {
+            // The bare name (`value`, `_value`) is not a FHIR element: the type is part of
+            // the name. The validator skips it, so any value would be stored.
+            for bare in [stem.clone(), format!("_{stem}")] {
+                if object.contains_key(&bare) {
+                    issues.push(Issue::error(
+                        "PHV-CHOICE",
+                        format!("{path}.{bare}"),
+                        format!(
+                            "{bare:?} is not an element; name the type, such as {:?}",
+                            choices.iter().min().map(String::as_str).unwrap_or("")
+                        ),
+                    ));
+                }
+            }
             let mut present: Vec<&String> =
                 choices.iter().filter(|c| object.contains_key(*c)).collect();
             present.sort();

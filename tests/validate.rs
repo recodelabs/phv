@@ -553,3 +553,112 @@ async fn upstream_tim_4_bug_is_a_warning_and_a_real_failure_is_not() {
     let negative = errors(&statement(json!({"duration":-1,"durationUnit":"d"}))).await;
     assert!(negative.iter().any(|e| e.contains("tim-")), "{negative:?}");
 }
+
+fn has_choice_error(found: &[String]) -> bool {
+    found.iter().any(|e| e.contains("PHV-CHOICE"))
+}
+
+#[tokio::test]
+async fn a_bare_choice_name_is_rejected_whatever_its_value() {
+    let cases = [
+        json!({"resourceType":"Observation","status":"final","code":{"text":"x"},"value":"garbage"}),
+        json!({"resourceType":"Observation","status":"final","code":{"text":"x"},"value":{"anything":[1,2]}}),
+        json!({"resourceType":"Observation","status":"final","code":{"text":"x"},"value":1.5,"valueString":"x"}),
+        json!({"resourceType":"Observation","status":"final","code":{"text":"x"},"effective":"not a date"}),
+        json!({"resourceType":"Observation","status":"final","code":{"text":"x"},"_value":{"id":"a"}}),
+        json!({"resourceType":"Patient","deceased":"maybe"}),
+        json!({"resourceType":"MedicationRequest","status":"active","intent":"order",
+            "medication":"aspirin","subject":{"display":"x"}}),
+        json!({"resourceType":"Immunization","status":"completed",
+            "vaccineCode":{"text":"v"},"patient":{"display":"x"},"occurrence":"yesterday"}),
+    ];
+    for case in cases {
+        let found = errors(&case).await;
+        assert!(has_choice_error(&found), "{case}: {found:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_bare_choice_name_is_rejected_at_every_depth() {
+    let bad_values = [
+        ("value", json!("garbage")),
+        ("value", json!({"anything":[1,2]})),
+        ("_value", json!({"id":"a"})),
+    ];
+    for (key, bad) in bad_values {
+        let mut component = lab();
+        component["component"] = json!([{"code":{"text":"c"}, key: bad.clone()}]);
+        assert!(
+            has_choice_error(&errors(&component).await),
+            "component {key}"
+        );
+
+        let mut extension = lab();
+        extension["extension"] = json!([{"url":"http://example.org/fhir/x", key: bad.clone()}]);
+        assert!(
+            has_choice_error(&errors(&extension).await),
+            "extension {key}"
+        );
+
+        let mut nested = lab();
+        nested["extension"] = json!([{"url":"http://example.org/fhir/outer",
+            "extension":[{"url":"http://example.org/fhir/y", key: bad.clone()}]}]);
+        assert!(has_choice_error(&errors(&nested).await), "nested {key}");
+
+        let mut modifier = lab();
+        modifier["modifierExtension"] =
+            json!([{"url":"http://example.org/fhir/x", key: bad.clone()}]);
+        assert!(
+            has_choice_error(&errors(&modifier).await),
+            "modifierExtension {key}"
+        );
+
+        let mut in_type = lab();
+        in_type["code"]["extension"] =
+            json!([{"url":"http://example.org/fhir/x", key: bad.clone()}]);
+        assert!(has_choice_error(&errors(&in_type).await), "in type {key}");
+
+        let mut contained = lab_containing(json!({"resourceType":"Observation","id":"c1",
+            "status":"final","code":{"text":"x"}}));
+        contained["contained"][0][key] = bad.clone();
+        assert!(
+            has_choice_error(&errors(&contained).await),
+            "contained {key}"
+        );
+
+        let in_contained_ext = lab_containing(json!({"resourceType":"Observation","id":"c1",
+            "status":"final","code":{"text":"x"},
+            "extension":[{"url":"http://example.org/fhir/x", key: bad.clone()}]}));
+        assert!(
+            has_choice_error(&errors(&in_contained_ext).await),
+            "contained extension {key}"
+        );
+
+        let bundle = json!({"resourceType":"Bundle","type":"collection","entry":[
+            {"resource":{"resourceType":"Observation","status":"final","code":{"text":"x"}, key: bad.clone()}}]});
+        assert!(has_choice_error(&errors(&bundle).await), "bundle {key}");
+
+        let bundle_deep = json!({"resourceType":"Bundle","type":"collection","entry":[
+            {"resource":{"resourceType":"Observation","status":"final","code":{"text":"x"},
+                "component":[{"code":{"text":"c"}, key: bad.clone()}]}}]});
+        assert!(
+            has_choice_error(&errors(&bundle_deep).await),
+            "bundle component {key}"
+        );
+    }
+
+    let mut primitive = lab();
+    primitive["_status"] = json!({"extension":[{"url":"http://example.org/fhir/x","value":"g"}]});
+    assert!(has_choice_error(&errors(&primitive).await), "primitive");
+}
+
+#[tokio::test]
+async fn typed_choice_names_still_pass() {
+    let mut r = lab();
+    r["component"] = json!([{"code":{"text":"c"},"valueString":"fine"}]);
+    r["extension"] = json!([{"url":"http://example.org/fhir/x","valueInteger":1}]);
+    r["_status"] = json!({"extension":[{"url":"http://example.org/fhir/x","valueCode":"a"}]});
+    assert_eq!(errors(&r).await, Vec::<String>::new());
+    let p = json!({"resourceType":"Patient","deceasedBoolean":true});
+    assert_eq!(errors(&p).await, Vec::<String>::new());
+}

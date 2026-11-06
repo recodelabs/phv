@@ -34,7 +34,15 @@ phv use ben                    # change the default
 phv --vault maya list Patient  # use a specific vault
 ```
 
-With Git, review changes with `git diff` and commit the ones you accept. Without Git, there is no history, so `phv replace` and `phv rm` cannot be undone.
+With Git, review changes before committing them. `<vault>` is the vault's folder from `phv vaults`:
+
+```bash
+git -C <vault> status
+git -C <vault> add -N . && git -C <vault> diff
+git -C <vault> add -A && git -C <vault> commit -m "Add lab results"
+```
+
+Plain `git diff` shows nothing for a new file, so `add -N` first makes new files show up in the diff. Without Git, there is no history, so `phv replace` and `phv rm` cannot be undone.
 
 To try phv with fake data, see [demo/README.md](demo/README.md).
 
@@ -71,6 +79,7 @@ A change to one record changes one line, so Git diffs stay small. Values are kep
 Install the skill, then ask Claude Code to add a lab report:
 
 ```bash
+mkdir -p ~/.claude/skills
 ln -s "$(pwd)/skills/phv-add-lab" ~/.claude/skills/phv-add-lab
 ```
 
@@ -125,13 +134,13 @@ To stop using a vault in Claude Code, run `claude mcp remove --scope user phv-ma
 | `phv serve` | Run the REST API on `127.0.0.1:8747` |
 | `phv mcp` | Run a local MCP server for one vault, for Claude sessions |
 
-Use `-` as `FILE` for stdin, and `--json` for machine-readable output.
+Use `-` as `FILE` for stdin with `validate`, `add` and `replace`, and `--json` for machine-readable output.
 
 ## Privacy and security
 
 - **Readable files:** records are not encrypted by phv. Use full-disk encryption and keep your repo private.
 - **Hosted repos:** pushing to a hosted private repo, including one created by `phv setup`, gives that host readable health data and original documents. phv has no encrypted backup yet, so it does not recommend this.
-- **Git history:** in a vault with Git, `phv rm` removes a record from the files, but it stays in history until you rewrite it, and in any remote copies after that.
+- **Git history:** in a vault with Git, `phv rm` removes a record from the files, but it stays in history until you rewrite it, and in any remote copies after that. Removing a `DocumentReference` record does not delete the original file in `sources/`: delete that file too if the document must go. It stays in history like any other removed data.
 - **AI tools:** anything you send to a hosted AI is subject to that provider's terms. Use a local model for data that must stay on your device.
 - **Not medical advice:** check every extracted value against the original document. phv checks the structure of records, not whether a value was read correctly.
 

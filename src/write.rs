@@ -2,6 +2,7 @@
 
 use crate::canon::{canon_resource, parse_json, strip_volatile};
 use crate::error::{Issue, PhvError};
+use crate::read::{check_resource_type, is_known_resource_type};
 use crate::refs::{ReferenceKind, collect_refs, reference_kind};
 use crate::source::build_provenance;
 use crate::store::{Change, Vault, line_id};
@@ -82,6 +83,14 @@ impl Phv {
                         &from,
                         format!("{reference} is not a valid reference: use Type/id, a fragment, an absolute URL, or display only"),
                     )),
+                    // A lowercase or misspelled type would match a file on a case-insensitive disk.
+                    ReferenceKind::Local(target_type, _) if !is_known_resource_type(target_type) => {
+                        issues.push(Issue::error(
+                            "PHV-REF",
+                            &from,
+                            format!("{reference} does not name a FHIR R4 resource type: type names are case-sensitive, such as Patient"),
+                        ));
+                    }
                     ReferenceKind::Local(target_type, target_id) => {
                         if submitted.contains(&reference) {
                             continue;
@@ -216,6 +225,7 @@ impl Phv {
         input: &Value,
         dry_run: bool,
     ) -> Result<WriteReport, PhvError> {
+        check_resource_type(resource_type)?;
         let _lock = self.vault.lock_async().await?;
         let Some(existing) = self.vault.get(resource_type, id)? else {
             return Err(PhvError::NotFound(format!("{resource_type}/{id}")));
@@ -268,6 +278,7 @@ impl Phv {
     }
 
     pub async fn remove(&self, resource_type: &str, id: &str) -> Result<(), PhvError> {
+        check_resource_type(resource_type)?;
         let _lock = self.vault.lock_async().await?;
         if self.vault.get(resource_type, id)?.is_none() {
             return Err(PhvError::NotFound(format!("{resource_type}/{id}")));

@@ -448,3 +448,18 @@ async fn an_unreadable_stored_source_record_points_at_check_not_source_add() {
     }
     assert_eq!(records(&phv, "Observation"), "");
 }
+
+#[tokio::test]
+async fn a_refused_record_write_leaves_no_file_in_sources() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let unsorted = "{\"resourceType\":\"DocumentReference\",\"id\":\"b\"}\n{\"resourceType\":\"DocumentReference\",\"id\":\"a\"}\n";
+    let path = phv.vault().root().join("records/DocumentReference.ndjson");
+    std::fs::write(&path, unsorted).unwrap();
+    assert!(phv.source_add("a.pdf", PDF).await.is_err());
+    let files: Vec<_> = std::fs::read_dir(phv.vault().root().join("sources"))
+        .unwrap()
+        .collect();
+    assert!(files.is_empty(), "{files:?}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), unsorted);
+}

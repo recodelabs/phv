@@ -37,7 +37,7 @@ async fn list_without_a_filter_returns_everything_in_id_order() {
             .await
             .unwrap();
     }
-    let lines = phv.list("Observation", None).await.unwrap();
+    let lines = phv.search("Observation", None).await.unwrap().lines;
     assert_eq!(lines.len(), 3);
     let mut sorted = lines.clone();
     sorted.sort();
@@ -54,24 +54,27 @@ async fn list_filters_with_fhirpath() {
             .unwrap();
     }
     assert_eq!(
-        phv.list("Observation", Some("valueQuantity.value > 1.9"))
+        phv.search("Observation", Some("valueQuantity.value > 1.9"))
             .await
             .unwrap()
+            .lines
             .len(),
         2
     );
     assert_eq!(
-        phv.list("Observation", Some("status = 'nope'"))
+        phv.search("Observation", Some("status = 'nope'"))
             .await
             .unwrap()
+            .lines
             .len(),
         0
     );
     // A filter that evaluates to empty does not match.
     assert_eq!(
-        phv.list("Observation", Some("missing.field = 1"))
+        phv.search("Observation", Some("missing.field = 1"))
             .await
             .unwrap()
+            .lines
             .len(),
         0
     );
@@ -85,7 +88,7 @@ async fn a_bad_expression_is_a_usage_error() {
         .await
         .unwrap();
     assert!(matches!(
-        phv.list("Observation", Some("((")).await.unwrap_err(),
+        phv.search("Observation", Some("((")).await.unwrap_err(),
         PhvError::Usage(_)
     ));
 }
@@ -93,7 +96,13 @@ async fn a_bad_expression_is_a_usage_error() {
 #[tokio::test]
 async fn listing_an_empty_type_is_empty_not_an_error() {
     let (_d, phv) = phv().await;
-    assert!(phv.list("Condition", None).await.unwrap().is_empty());
+    assert!(
+        phv.search("Condition", None)
+            .await
+            .unwrap()
+            .lines
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -103,10 +112,6 @@ async fn unknown_or_abstract_types_are_usage_errors() {
         assert!(
             matches!(phv.get(bad, "x").unwrap_err(), PhvError::Usage(_)),
             "get {bad}"
-        );
-        assert!(
-            matches!(phv.list(bad, None).await.unwrap_err(), PhvError::Usage(_)),
-            "list {bad}"
         );
         assert!(
             matches!(phv.search(bad, None).await.unwrap_err(), PhvError::Usage(_)),
@@ -143,7 +148,7 @@ async fn an_evaluation_error_names_the_record() {
         .created[0]
         .clone();
     let err = phv
-        .list("Observation", Some("code.coding.code.single() = '2160-0'"))
+        .search("Observation", Some("code.coding.code.single() = '2160-0'"))
         .await
         .unwrap_err();
     assert!(matches!(err, PhvError::Usage(_)), "{err}");
@@ -162,7 +167,7 @@ async fn an_unreadable_line_names_its_line_number() {
     text.push('\n');
     std::fs::write(&path, &text).unwrap();
     let err = phv
-        .list("Observation", Some("status = 'final'"))
+        .search("Observation", Some("status = 'final'"))
         .await
         .unwrap_err();
     assert!(matches!(err, PhvError::Usage(_)), "{err}");
@@ -174,7 +179,7 @@ async fn an_unreadable_line_names_its_line_number() {
     text.push_str("{\"resourceType\":\"Observation\",\"id\":\"cut\n");
     std::fs::write(&path, &text).unwrap();
     let err = phv
-        .list("Observation", Some("status = 'final'"))
+        .search("Observation", Some("status = 'final'"))
         .await
         .unwrap_err();
     assert!(err.to_string().contains("line 2"), "{err}");

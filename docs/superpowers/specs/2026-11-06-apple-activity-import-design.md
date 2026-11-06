@@ -37,17 +37,29 @@ Rows are keyed on `date` for days and `uuid` for workouts. Identical repeats col
 
 ### 2. Rows already in the vault
 
-Every resource carries its natural key as an `identifier`, and its ID is derived from that key rather than its content, so a changed row updates in place. The day or workout resource also holds the SHA-256 of its source row in `meta.tag` (system `urn:phv:source-row`). Triage compares a row's hash to the stored one without building any FHIR:
+Every resource carries its natural key as an `identifier`, and its ID is derived from that key rather than its content, so a changed row updates in place. The day or workout resource also holds two tags in `meta.tag`: the SHA-256 of its source row (system `urn:phv:source-row`), and the summary's `through` date of the export that wrote it (system `urn:phv:export-through`, as `YYYY-MM-DD`). Triage compares a row's hash to the stored one without building any FHIR:
 
 | Stored record | Row | Outcome |
 |---|---|---|
 | None | | Convert as new |
+| No `source-row` tag | Any | Keep the stored record and report it, since someone replaced it by hand |
 | Same hash | | Skip as unchanged |
+| Different hash, file older than the vault | | Keep the stored record and report it |
 | Different hash, day, same time zone | Total changed, such as a late Watch sync | Convert and update in place |
 | Different hash, day, different time zone | The app's home zone changed, which moves every day's boundaries | Keep the stored record and report it |
-| Different hash, workout | | Convert and update in place, removing members it no longer has |
+| Different hash, workout | | Convert and update in place, removing members it no longer has, except any another record references |
 
 Comparing the source hash and not the FHIR means a later change to the mapping does not rewrite stored lines, which the [vault core's small diff rules](2026-11-06-vault-core-design.md#keeping-git-diffs-small) require. Moving a mapping change into stored records would need an explicit migration.
+
+**Older exports.** Each export is a full snapshot as of its `through` date, so an older file holds older values. The vault's date is the newest `export-through` tag on any stored day or workout. A file whose `through` is earlier than that is older, and every stored day or workout it would change is kept and reported (`older_export`) with both dates. Rows the vault has not seen still import. A file with the same date as the vault, or a newer one, updates as usual, and the records it writes take its date. A `through` that is present but not a date refuses the file.
+
+The comparison is across the whole vault and not per record, because an unchanged row is skipped and keeps the older date it was stored with. A newer export that wrote nothing for a row would otherwise leave that row looking old. The date only moves when an export writes something, so an export that adds nothing does not raise it. Records stored before the tag existed have only the hash, and they are treated as having no date: when no stored record has a date, or the file has no `through`, there is nothing to compare and the file is applied as before. Once any record has a date, older files are held for the untagged records as well.
+
+**Records edited by hand.** `phv replace` stores what it is given. A day or workout replaced without the `source-row` tag can no longer say which row it came from, and a missing hash would otherwise count as a changed row and overwrite the correction. It is kept and reported (`edited_since_import`) on every import, changed row or not, until the record is removed with `phv rm`. A replacement that keeps the `source-row` tag is not seen as a correction, and is overwritten when its row changes. A workout's members are not watched either: a hand edit to a member is overwritten when the workout's row changes. A replacement that also drops the `identifier` is no longer recognised as an imported record, so the importer treats the row as new and overwrites it.
+
+**Members in use.** When a changed workout no longer has a measure, the member is removed unless another record references it, as `phv rm` would refuse to remove it. A member in use is kept, left out of the panel's `hasMember`, and reported (`kept_members`) with the records that reference it, so the import never leaves a dangling reference.
+
+Holds do not change the exit code, as with a time zone hold: nothing was rejected, and the stored records are as they were.
 
 ### 3. One session from two sources
 
