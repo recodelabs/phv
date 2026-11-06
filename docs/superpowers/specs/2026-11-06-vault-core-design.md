@@ -15,7 +15,7 @@ phv (personal health vault) keeps one person's health records as FHIR R4 files o
 | Not in this sub-project | Where it goes |
 |---|---|
 | AI mapping skills beyond lab results (photos of visit notes, receipts) | Sub-project 2 |
-| Health memory (mood, sleep, diet) and AI access through MCP | Sub-project 3 |
+| Health memory (mood, sleep, diet) and limits on what AI can read | Sub-project 3 |
 | IPS and narrative summaries, IPS profile validation | Sub-project 4 |
 | HealthKit, Strava and other importers | Sub-project 5 |
 | Parquet warehouse through fhir-pipes-rs, web dashboard, browser upload | Sub-project 6 |
@@ -243,9 +243,33 @@ Errors return a FHIR `OperationOutcome`: 400 for malformed input, 404 for a miss
 
 The server rejects requests whose `Host` header is not `127.0.0.1` or `localhost`, and any request with an `Origin` header from elsewhere. This stops a web page in the person's browser from reaching the API.
 
+### MCP server
+
+`phv mcp` runs a local MCP server over stdio, so a Claude session can upload documents and work with records. Claude Code starts it as a subprocess:
+
+```bash
+claude mcp add phv-maya -- phv --vault maya mcp
+```
+
+Each server serves one vault, so a session connected for one family member cannot write to another's records. `phv setup` prints this command.
+
+| Tool | Purpose |
+|---|---|
+| `vault_info` | Show the vault's path and `Patient` |
+| `source_add` | Store a document from a path on this machine |
+| `validate` | Check a resource or Bundle without writing |
+| `add` | Same as `phv add` |
+| `replace` | Same as `phv replace` |
+| `get`, `list` | Read records, with an optional FHIRPath filter |
+| `check` | Check the whole vault |
+
+There is no removal tool, so an AI session cannot delete records. `resource_json` is JSON text rather than parsed arguments, so duplicate keys are still rejected and decimals stay exact. Uploads are by path, because sending file contents as a tool argument would pass them through the model.
+
+The server runs locally, but Claude runs on Anthropic's servers, so anything a tool returns goes to Anthropic. Keeping data on the device needs a local model. This server has no limits on what a session can read, and sub-project 3 covers those.
+
 ## First skill: add a lab result
 
-The first way to add content is Claude with a skill, starting with a lab result PDF. The skill lives at `skills/phv-add-lab/SKILL.md` in this repo. It needs only the `phv` binary, so it uses the CLI and not the REST API.
+The first way to add content is Claude with a skill, starting with a lab result PDF. The skill lives at `skills/phv-add-lab/SKILL.md` in this repo. It needs only the `phv` binary, so it uses the CLI and not the REST API or the MCP server.
 
 The flow:
 
@@ -281,7 +305,8 @@ Termbox's docs say authentication is coming soon, and they give no statement on 
 ## Security
 
 - **AI output is untrusted:** a mapper can only propose resources through validation. It has no path to edit files through phv.
-- **No network use:** phv itself makes no outbound connections, and the test above keeps HTTP clients out of the build. Its only network use is `git` and `gh`, run by `phv setup` when the person chooses GitHub. The lab skill separately sends test names to Termbox.
+- **MCP uploads:** `source_add` copies any file the server can read into the vault, so a session steered by a malicious document could store a private file there. It stays in the vault folder, and the person sees it in `git status` or the source list, but the same session can usually read that file anyway.
+- **No network use:** phv itself makes no outbound connections, and the test above keeps HTTP clients out of the build. The MCP server uses stdio only. Its only network use is `git` and `gh`, run by `phv setup` when the person chooses GitHub. The lab skill separately sends test names to Termbox.
 - **Data at rest:** files are not encrypted by phv. New vault folders and data files are private to the user on macOS and Linux, and otherwise the person relies on full-disk encryption and a private repo.
 - **Remote copies:** pushing to a hosted private repo gives that host readable health data, including original documents. `phv setup` says this before asking, defaults to no, and asks for every vault. phv does not recommend hosted backups until encryption before push is solved, and the docs say so plainly.
 - **Git permanence:** deleted data stays in history until the person rewrites it, and in any existing remote copy after that.
@@ -294,6 +319,7 @@ Termbox's docs say authentication is coming soon, and they give no statement on 
 - **Validation:** for each resource type used in the first skills (Patient, Observation, DiagnosticReport, Condition, MedicationStatement, AllergyIntolerance, Immunization, DocumentReference, Provenance), one valid case and broken cases. Regression tests pin each spike finding.
 - **Rejection:** an invalid resource in a Bundle writes nothing at all.
 - **Interfaces:** CLI and API give the same results for the same input. The API rejects bad `Host` and `Origin` headers.
+- **MCP:** a real stdio session lists the tools, uploads a document, writes linked records, keeps decimals exact, returns problems as tool errors, and offers no removal.
 - **Setup:** runs with no `git` on `PATH`, with Git declined, and with a fake `gh`. The GitHub repo is only created on an explicit yes and is always private. A second family member gets a separate vault.
 - **fhir-pipes compatibility:** CI runs `fhir-pipes views run` over a sample vault's `records/` directory.
 - **Build guard:** `cargo tree` check for HTTP clients and SQLite.
@@ -306,7 +332,7 @@ Each gets its own spec and plan.
 
 1. **Vault core:** this spec, including the first lab result skill.
 2. **Document ingestion:** more AI skills that map photos, visit notes and receipts to FHIR JSON and submit it through `phv add`. Needs a decision on the source for ICD-11 codes, which Termbox does not hold.
-3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus scoped AI access through MCP.
+3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus limits on what an MCP session can read.
 4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
 6. **Warehouse and dashboard:** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload.
