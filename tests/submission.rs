@@ -72,7 +72,14 @@ fn a_temporary_id_works_as_a_local_name() {
         .iter()
         .find(|r| r["resourceType"] == "DiagnosticReport")
         .unwrap();
-    assert_ne!(report["result"][0]["reference"], "Observation/tmp");
+    let obs = out
+        .iter()
+        .find(|r| r["resourceType"] == "Observation")
+        .unwrap();
+    assert_eq!(
+        report["result"][0]["reference"],
+        format!("Observation/{}", obs["id"].as_str().unwrap())
+    );
 }
 
 #[test]
@@ -292,4 +299,111 @@ fn entry_order_does_not_change_ids() {
         })
         .unwrap()
     );
+}
+
+fn usage_error(input: &Value) -> String {
+    match prepare(input) {
+        Err(phv::PhvError::Usage(message)) => message,
+        other => panic!("expected a usage error, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_cycle_gets_the_same_ids_alone_and_with_an_unrelated_resource() {
+    let small = prepare(&circular("a", "b")).unwrap();
+    let mut big_bundle = circular("a", "b");
+    big_bundle["entry"]
+        .as_array_mut()
+        .unwrap()
+        .push(obs("other", "Unrelated"));
+    let big = prepare(&big_bundle).unwrap();
+    assert_eq!(big.len(), 3);
+    for r in &small {
+        assert!(big.contains(r), "{r} missing from the larger result");
+    }
+}
+
+#[test]
+fn reports_pointing_into_different_cycles_are_refused() {
+    let cycle = |a: &str, b: &str, text: &str| {
+        vec![
+            json!({"fullUrl": format!("urn:uuid:{a}"), "resource": {
+                "resourceType": "Observation", "status": "final", "code": {"text": text},
+                "hasMember": [{"reference": format!("urn:uuid:{b}")}]
+            }}),
+            json!({"fullUrl": format!("urn:uuid:{b}"), "resource": {
+                "resourceType": "Observation", "status": "final", "code": {"text": "other"},
+                "hasMember": [{"reference": format!("urn:uuid:{a}")}]
+            }}),
+        ]
+    };
+    let mut entries = cycle("a1", "b1", "one");
+    entries.extend(cycle("a2", "b2", "two"));
+    entries.push(report("r1", "a1"));
+    entries.push(report("r2", "a2"));
+    let message = usage_error(&bundle(entries));
+    assert!(message.contains("would both become"), "{message}");
+}
+
+#[test]
+fn a_large_submission_with_a_cycle_is_prepared() {
+    let mut entries: Vec<Value> = (0..2000)
+        .map(|i| obs(&format!("o{i}"), &format!("Test {i}")))
+        .collect();
+    entries.extend(circular("a", "b")["entry"].as_array().unwrap().clone());
+    assert_eq!(prepare(&bundle(entries)).unwrap().len(), 2002);
+}
+
+#[test]
+fn duplicate_local_names_are_refused() {
+    let fresh =
+        |text: &str| json!({"resourceType":"Observation","status":"final","code":{"text":text}});
+    let with_id = |id: &str, text: &str| {
+        let mut r = fresh(text);
+        r["id"] = json!(id);
+        r
+    };
+    // same fullUrl, different resources
+    let b = bundle(vec![
+        json!({"fullUrl":"urn:uuid:x","resource":fresh("a")}),
+        json!({"fullUrl":"urn:uuid:x","resource":fresh("b")}),
+    ]);
+    assert!(usage_error(&b).contains("urn:uuid:x"));
+    // same temporary ID, different resources
+    let b = bundle(vec![
+        json!({"resource":with_id("abc","a")}),
+        json!({"resource":with_id("abc","b")}),
+    ]);
+    assert!(usage_error(&b).contains("Observation/abc"));
+    // a fullUrl that equals another entry's Type/id
+    let b = bundle(vec![
+        json!({"fullUrl":"Observation/abc","resource":fresh("a")}),
+        json!({"resource":with_id("abc","b")}),
+    ]);
+    assert!(usage_error(&b).contains("Observation/abc"));
+    // byte-identical entries may share a name and collapse
+    let b = bundle(vec![
+        json!({"resource":with_id("abc","a")}),
+        json!({"resource":with_id("abc","a")}),
+    ]);
+    assert_eq!(prepare(&b).unwrap().len(), 1);
+}
+
+#[test]
+fn a_bundle_without_usable_entries_is_refused() {
+    for b in [
+        json!({"resourceType":"Bundle","type":"collection"}),
+        json!({"resourceType":"Bundle","type":"collection","entry":[]}),
+        json!({"resourceType":"Bundle","type":"collection","entry":{"resource":{}}}),
+        json!({"resourceType":"Bundle","type":"collection","entry":"nope"}),
+        json!({"resourceType":"Bundle","type":"collection","entry":[5]}),
+    ] {
+        usage_error(&b);
+    }
+}
+
+#[test]
+fn a_bundle_inside_a_bundle_is_refused() {
+    let inner = json!({"resourceType":"Bundle","type":"collection","entry":[obs("o","x")]});
+    usage_error(&bundle(vec![json!({"resource": inner})]));
 }
