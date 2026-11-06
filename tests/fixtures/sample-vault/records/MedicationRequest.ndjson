@@ -1,0 +1,1 @@
+{"resourceType":"MedicationRequest","id":"request-amoxicillin","authoredOn":"2023-02-10","dosageInstruction":[{"text":"Three times a day for 7 days"}],"intent":"order","medicationReference":{"reference":"Medication/medication-amoxicillin"},"status":"completed","subject":{"reference":"Patient/patient-maya"}}
