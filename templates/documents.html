@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Documents{% endblock %}
+{% block main %}
+<h1>Documents</h1>
+<div id="doc-list">
+{% let vault = &chrome.vault %}
+{% include "documents_list.html" %}
+</div>
+{% endblock %}

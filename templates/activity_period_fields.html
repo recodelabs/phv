@@ -1,0 +1,10 @@
+<label>Year
+  <select name="year">
+    {% for o in &filters.period.years %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}{% if !o.enabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
+  </select>
+</label>
+<label>Month
+  <select name="month"{% if !filters.period.month_enabled %} disabled{% endif %}>
+    {% for o in &filters.period.months %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}{% if !o.enabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
+  </select>
+</label>

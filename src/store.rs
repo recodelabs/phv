@@ -420,6 +420,20 @@ impl Vault {
         }
     }
 
+    /// Each line's bytes, for readers that must survive one line of invalid UTF-8.
+    pub fn raw_lines(&self, resource_type: &str) -> Result<Vec<Vec<u8>>, PhvError> {
+        let path = self.file_for(resource_type)?;
+        match fs::read(path) {
+            Ok(bytes) => Ok(bytes
+                .split(|b| *b == b'\n')
+                .filter(|line| !line.is_empty())
+                .map(<[u8]>::to_vec)
+                .collect()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// The raw line for one resource, if present.
     pub fn get(&self, resource_type: &str, id: &str) -> Result<Option<String>, PhvError> {
         Ok(self

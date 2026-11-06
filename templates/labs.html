@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Labs{% endblock %}
+{% block main %}
+{% let vault = &chrome.vault %}
+<h1>Labs</h1>
+{% if reports.is_empty() && loose.is_empty() %}
+<p>No labs yet.</p>
+{% endif %}
+{% if !reports.is_empty() %}
+<table>
+  <tr><th>Report</th><th>Date</th><th>Status</th><th>Results</th></tr>
+  {% for r in &reports %}
+  <tr>
+    <td><a href="/v/{{ chrome.vault }}/labs/reports/{{ r.id_url }}">{{ r.name }}</a></td>
+    <td>{{ r.date }}</td>
+    <td>{{ r.status }}</td>
+    <td>{{ r.result_count }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% if !loose.is_empty() %}
+<h2>Results not in a report</h2>
+<table>
+  <tr><th>Test</th><th>Result</th><th>Date</th></tr>
+  {% for row in &loose %}
+  <tr>
+    <td><a href="/v/{{ chrome.vault }}/labs/tests/{{ row.key_url }}">{{ row.name }}</a></td>
+    <td>{% include "result_lines.html" %}</td>
+    <td>{{ row.date }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

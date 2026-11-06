@@ -1,0 +1,1 @@
+{% for line in &row.lines %}{{ line }}{% if !loop.last %}<br>{% endif %}{% else %}<a href="/v/{{ vault }}/fhir/Observation/{{ row.id_url }}">See FHIR</a>{% endfor %}

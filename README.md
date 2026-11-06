@@ -10,7 +10,7 @@ phv keeps your health records as FHIR R4 files on your own machine. AI can help 
 
 ## Status
 
-Early development. It runs on a laptop only. The main ways in are `phv setup`, the MCP server (`phv mcp`) and the lab skill. `phv import apple-activity` imports Apple activity exports. There is no web dashboard, health memory or IPS generation yet.
+Early development. It runs on a laptop only. The main ways in are `phv setup`, the MCP server (`phv mcp`) and the lab skill. `phv import apple-activity` imports Apple activity exports. `cargo run --release --example browser` starts a local read-only web browser for your records, on `127.0.0.1:8747`. There is no health memory or IPS generation yet.
 
 ## Install
 

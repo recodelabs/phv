@@ -1,0 +1,2 @@
+{"resourceType":"Immunization","id":"vaccine-flu","occurrenceDateTime":"2026-09-02","patient":{"reference":"Patient/patient-maya"},"status":"completed","vaccineCode":{"text":"Influenza"}}
+{"resourceType":"Immunization","id":"vaccine-mmr-not-given","occurrenceString":"Spring 2020","patient":{"reference":"Patient/patient-maya"},"status":"not-done","vaccineCode":{"text":"MMR"}}

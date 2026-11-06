@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"allowEval":false,"selfRequestsOnly":true,"includeIndicatorStyles":false,"historyCacheSize":0,"refreshOnHistoryMiss":true}'>
+<title>{% block title %}{% endblock %} · {{ chrome.person }} · Personal Health Vault (PHV)</title>
+<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+<link rel="stylesheet" href="/assets/style.css">
+<script defer src="/assets/htmx.min.js"></script>
+{% block scripts %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <span class="brand"><img src="/assets/logo.svg" alt="" width="24" height="24">Personal Health Vault (PHV)</span>
+  {% if !chrome.switcher.is_empty() %}
+  <details class="switcher">
+    <summary>{{ chrome.vault }}</summary>
+    <ul>
+      {% for item in &chrome.switcher %}
+      <li>
+        {% if item.available %}<a href="{{ item.href }}"{% if item.on %} aria-current="true"{% endif %}>{{ item.name }}</a>
+        {% else %}{{ item.name }} <span class="muted">(unavailable)</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</header>
+<div class="layout">
+  <nav class="nav">
+    {% for item in &chrome.nav %}
+    <a href="{{ item.href }}"{% if item.on %} aria-current="page"{% endif %}{% if item.label == "All FHIR" %} class="fhir"{% endif %}>{{ item.label }}</a>
+    {% endfor %}
+  </nav>
+  <main>
+    {% if chrome.unreadable > 0 %}
+    <p class="notice">{{ chrome.unreadable }} records couldn't be read. Run <code>phv check</code>.</p>
+    {% endif %}
+    {% block main %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>
