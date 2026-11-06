@@ -4910,6 +4910,7 @@ Use `-` as `FILE` for stdin, and `--json` for machine-readable output.
 - Validation covers base FHIR R4, not profiles.
 - Some required code lists are not enforced, including currencies and MIME types. `cargo test only_the_known_required_bindings_are_uncovered -- --nocapture` lists them.
 - Valid medication timing without a `period` produces a warning, caused by an upstream octofhir issue.
+- Some FHIR rules on data types are not enforced upstream, such as a `Period` that ends before it starts, or a `Range` whose low is above its high. Check dates and ranges against the original document.
 
 ## Design
 
