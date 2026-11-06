@@ -302,8 +302,8 @@ The skill looks up codes in Health Samurai's hosted [Termbox](https://www.health
 What we found on the live service on 2026-11-06:
 
 - **LOINC:** version 2.82 is searchable. Results are not ranked by what is likely, and include parts, deprecated codes and panels, so the skill has explicit rules for choosing, and the person confirms the codes.
-- **ICD-10 (WHO 2019):** searchable, including chapter ranges such as `E10-E14`, which are not usable as a diagnosis code.
-- **ICD-11:** the code system is listed with `content: not-present`, and a search returned an error, so it cannot be used there. Lab results do not need ICD. Choosing an ICD-11 source belongs to the visit note skill in sub-project 2.
+- **ICD-10:** searchable, including chapter ranges such as `E10-E14`, which are not usable as a diagnosis code. Document ingestion uses the ICD-10 that Termbox provides, including WHO 2019 and ICD-10-CM.
+- **ICD-11:** the code system is listed with `content: not-present`, and a search returned an error, so phv does not use it.
 
 Termbox's docs say authentication is coming soon, and they give no statement on request logging or retention.
 
@@ -336,11 +336,11 @@ Test data is synthetic. Real health data never goes in this repo.
 Each gets its own spec and plan.
 
 1. **Vault core:** this spec, including the first lab result skill.
-2. **Document ingestion:** more AI skills that map photos, visit notes and receipts to FHIR JSON and submit it through `phv add`. Needs a decision on the source for ICD-11 codes, which Termbox does not hold.
+2. **Document ingestion (next):** more AI skills that map photos, visit notes and receipts to FHIR JSON and submit it through `phv add`, coding diagnoses with the ICD-10 that Termbox provides.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus limits on what an MCP session can read.
 4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
-6. **Warehouse and dashboard:** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload. `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
+6. **Warehouse and dashboard (on hold):** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload. `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
 
 ### Notes for the importer sub-project
 
