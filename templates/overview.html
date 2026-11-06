@@ -2,7 +2,7 @@
 {% block title %}Overview{% endblock %}
 {% block main %}
 <h1>{{ chrome.person }}</h1>
-<p class="sub">{% if let Some(born) = &view.birth_date %}Born {{ born }} · {% endif %}{{ record_count }} records · {{ document_count }} documents</p>
+<p class="sub">{% if let Some(born) = &view.birth_date %}Born {{ born }} · {% endif %}{% if let Some(age) = &view.age %}{{ age }} · {% endif %}{{ record_count }} records · {{ document_count }} documents</p>
 {% if view.measures.is_empty() && view.latest_steps.is_none() %}
 <p>No vitals yet.</p>
 {% else %}

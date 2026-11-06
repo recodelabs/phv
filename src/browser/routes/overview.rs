@@ -29,7 +29,9 @@ async fn page(State(app): State<App>, Path(vault): Path<String>) -> Response {
         let requests = cx.records.of_type("MedicationRequest")?;
         let medications = cx.records.of_type("Medication")?;
         let allergies = cx.records.of_type("AllergyIntolerance")?;
+        let today = humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string();
         let view = overview(&Sources {
+            today: today.get(..10).unwrap_or_default(),
             patients: &patients,
             observations: &observations,
             reports: &reports,
