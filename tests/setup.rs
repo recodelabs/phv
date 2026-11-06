@@ -292,3 +292,14 @@ fn replace_and_rm_warn_when_a_vault_has_no_git() {
         "{o:?}"
     );
 }
+
+#[test]
+fn setup_shows_how_to_connect_a_claude_session() {
+    let e = env();
+    let o = phv(&e, &["setup"], &answers(&[]));
+    assert!(
+        stdout(&o).contains("claude mcp add phv-maya -- phv --vault maya mcp"),
+        "{}",
+        stdout(&o)
+    );
+}

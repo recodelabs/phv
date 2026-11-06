@@ -238,5 +238,10 @@ pub async fn run(home: &Path) -> Result<(), PhvError> {
     } else {
         println!("Use it with phv --vault {name}, or make it the default with phv use {name}.");
     }
+    println!("\nTo use this vault from a Claude Code session, run:");
+    println!("  claude mcp add phv-{name} -- phv --vault {name} mcp");
+    println!(
+        "Claude runs on Anthropic's servers, so anything a session reads from the vault goes to Anthropic."
+    );
     Ok(())
 }
