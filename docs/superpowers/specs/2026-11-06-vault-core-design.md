@@ -184,9 +184,9 @@ Default features are disabled on both octofhir crates, keeping HTTP clients out 
 - `content[0].attachment`: `contentType` from the extension, and `url` set to the relative path.
 - `subject`: the vault's `Patient`, when one exists.
 
-Adding the same file again changes nothing and reports the existing `DocumentReference`, which warns the person that it has already been imported. Re-running AI on a source may still produce different resources, so the warning is what stops accidental duplicates.
+Adding the same file again changes no records and reports the existing `DocumentReference`, which warns the person that it has already been imported. If the stored file is missing or damaged, the same call restores it. Re-running AI on a source may still produce different resources, so the warning is what stops accidental duplicates.
 
-`phv add --source <sha256> --agent NAME` also writes a `Provenance` linking the new resources to that `DocumentReference`, with `agent.who.display` set to `NAME`. `--agent` is required with `--source`.
+`phv add --source <sha256> --agent NAME` also writes a `Provenance` linking every submitted resource to that `DocumentReference`, including resources already stored, because the document supports them too. `agent.who.display` is set to `NAME`. `--agent` is required with `--source`, and `--source` must be a full SHA-256.
 
 `Provenance.recorded` comes from `--recorded-at`, defaulting to the current UTC time. The clock is read only in the CLI and API layer and passed into the library, so the library stays deterministic. The `Provenance` ID hashes the source hash, the sorted target references and the agent. If that ID already exists, nothing changes.
 
