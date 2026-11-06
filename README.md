@@ -132,6 +132,7 @@ To stop using a vault in Claude Code, run `claude mcp remove --scope user phv-ma
 | `phv list Type [--where EXPR]` | Print resources, with an optional FHIRPath filter |
 | `phv source add FILE` | Store an original file |
 | `phv check` | Check the whole vault |
+| `phv snapshot` | Capture records and source hashes as JSON under a read-only shared lock |
 | `phv import apple-activity FILE [--dry-run] [--keep-overlaps]` | Import steps and workouts from an Apple activity export |
 | `phv serve` | Run the REST API on `127.0.0.1:8747` |
 | `phv mcp` | Run a local MCP server for one vault, for Claude sessions |

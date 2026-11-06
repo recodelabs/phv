@@ -78,6 +78,8 @@ pub enum Command {
     Source(SourceCommand),
     /// Check the whole vault. Changes nothing.
     Check,
+    /// Capture records and source hashes under a read-only shared lock. Prints JSON.
+    Snapshot,
     /// Run the local REST API on 127.0.0.1.
     Serve {
         #[arg(long, default_value_t = 8747)]
@@ -242,6 +244,10 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
     }
 
     let vault = Vault::open(&vault_path(cli.vault.as_deref())?)?;
+    if matches!(cli.command, Command::Snapshot) {
+        print_json(&crate::snapshot::capture(&vault)?)?;
+        return Ok(ExitCode::SUCCESS);
+    }
     let phv = Phv::new(vault).await?;
 
     match cli.command {
@@ -250,6 +256,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         | Command::Use { .. }
         | Command::Init { .. }
         | Command::Import { .. } => unreachable!("handled above"),
+        Command::Snapshot => unreachable!("handled above"),
         Command::Validate { file } => {
             let issues = phv.validate_submission(&read_json(&file)?).await?;
             let failed = issues.iter().any(Issue::is_error);

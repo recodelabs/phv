@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Fatigue brief · Personal health vault</title>
+    <meta name="description" content="A local synthetic demonstration of preparing a traceable symptom brief.">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to preparation</a>
+    <header class="site-header">
+      <div class="brand-mark" aria-hidden="true">＋</div>
+      <div><strong>Personal health vault</strong><span>Prepare for a conversation that matters.</span></div>
+      <span class="local-badge">Local prototype</span>
+    </header>
+    <div class="demo-notice"><strong>Synthetic case</strong><span>Draft framework · not clinically approved. This demonstration does not assess urgency.</span></div>
+    <main id="main" tabindex="-1"><div id="app"><p role="status">Opening the synthetic case…</p></div></main>
+    <footer class="site-footer"><span>Only fictional records are used. No information is sent to a doctor.</span><span>Answers stay in this page. Refreshing clears them.</span></footer>
+    <dialog id="detail-dialog" aria-labelledby="detail-title"><div id="dialog-content"></div></dialog>
+    <section id="print-view" aria-label="Printable brief"></section>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

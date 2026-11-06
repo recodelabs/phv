@@ -14,3 +14,8 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Synthetic vault and symptom flow
+        run: PHV_TEST_BINARY="$PWD/target/debug/phv" node --test prototype/fatigue/engine.test.mjs prototype/fatigue/server.test.mjs prototype/fatigue/vault-adapter.test.mjs
