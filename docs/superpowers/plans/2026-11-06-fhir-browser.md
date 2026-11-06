@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust 1.99.1, Axum 0.8, Askama 0.16, htmx 2.0.11 (embedded in the binary), and the existing `phv::store` and `phv::canon`.
 
-**Status on 2026-11-06:** Tasks 1 to 11 are done, and code review findings are fixed. Task 12's library part is done: `SourceOptions`, `source_add_with`, the skill and the design. Its Steps 5 and 6 (`--category` in the CLI, `category` in the API) still wait on vault-core Tasks 11 and 12, and the CLI must pass `added_at`, or documents will show "No date". Task 13 waits on the same tasks. HealthKit upload and an Activity topic are deferred at the user's request.
+**Status on 2026-11-06:** Tasks 1 to 11 are done, and code review findings are fixed. Task 12 is done except Step 6 (`category` in the API), which waits on vault-core Task 12. Task 13 waits on the same task. HealthKit upload and an Activity topic are deferred at the user's request.
 
 **How far this has been checked:** Tasks 1 to 11 were replayed in order in a clean clone before this plan was written. Each task's tests passed at its own stage, and the end state passed the full suite, clippy with warnings denied, and `cargo fmt --check`. Tasks 12 and 13 depend on `vault-core` code that did not exist yet, so **they were not compiled**. Check them against the merged code.
 

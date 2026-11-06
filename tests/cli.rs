@@ -198,3 +198,43 @@ fn a_bad_target_exits_2() {
     let (_d, v) = new_vault();
     assert_eq!(phv(&v, &["get", "no-slash"]).status.code(), Some(2));
 }
+
+#[test]
+fn source_add_records_a_category_and_the_time_it_was_added() {
+    let (d, v) = new_vault();
+    let file = d.path().join("receipt.pdf");
+    std::fs::write(&file, b"%PDF synthetic").unwrap();
+    let o = phv(
+        &v,
+        &[
+            "source",
+            "add",
+            file.to_str().unwrap(),
+            "--category",
+            "receipt",
+        ],
+    );
+    assert!(o.status.success(), "{o:?}");
+    let text = std::fs::read_to_string(v.join("records/DocumentReference.ndjson")).unwrap();
+    assert!(text.contains(r#""code":"receipt""#), "{text}");
+    assert!(text.contains(r#""date":"20"#), "{text}");
+}
+
+#[test]
+fn source_add_refuses_an_unknown_category() {
+    let (d, v) = new_vault();
+    let file = d.path().join("receipt.pdf");
+    std::fs::write(&file, b"%PDF synthetic").unwrap();
+    let o = phv(
+        &v,
+        &[
+            "source",
+            "add",
+            file.to_str().unwrap(),
+            "--category",
+            "nonsense",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(!v.join("records/DocumentReference.ndjson").exists());
+}

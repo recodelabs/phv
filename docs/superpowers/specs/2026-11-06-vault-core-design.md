@@ -222,7 +222,7 @@ phv replace Type/id FILE|- [--dry-run]
 phv rm Type/id
 phv get Type/id
 phv list Type [--where EXPR]
-phv source add FILE
+phv source add FILE [--category CATEGORY]
 phv check
 phv serve [--port N]
 ```

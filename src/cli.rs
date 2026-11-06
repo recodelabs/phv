@@ -87,7 +87,12 @@ pub enum Command {
 #[derive(Subcommand)]
 pub enum SourceCommand {
     /// Store an original file and create its DocumentReference.
-    Add { file: PathBuf },
+    Add {
+        file: PathBuf,
+        /// What kind of document this is: lab, receipt, visit-note, imaging or other.
+        #[arg(long)]
+        category: Option<String>,
+    },
 }
 
 pub(crate) fn vault_path(flag: Option<&Path>) -> Result<PathBuf, PhvError> {
@@ -249,7 +254,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Source(SourceCommand::Add { file }) => {
+        Command::Source(SourceCommand::Add { file, category }) => {
             let bytes = std::fs::read(&file)
                 .map_err(|e| PhvError::Usage(format!("cannot read {}: {e}", file.display())))?;
             let name = file
@@ -257,7 +262,11 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
                 .and_then(|n| n.to_str())
                 .unwrap_or("source")
                 .to_string();
-            let report = phv.source_add(&name, &bytes).await?;
+            let options = crate::source::SourceOptions {
+                category,
+                added_at: Some(now()),
+            };
+            let report = phv.source_add_with(&name, &bytes, &options).await?;
             if cli.json {
                 print_json(&report);
             } else {
