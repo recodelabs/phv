@@ -233,3 +233,42 @@ async fn check_works_on_a_read_only_vault_and_creates_nothing() {
     assert!(issues.iter().all(|i| !i.is_error()), "{issues:?}");
     assert_eq!(listing(&root), before);
 }
+
+#[tokio::test]
+async fn check_finds_more_than_one_patient() {
+    let (_d, phv) = phv().await;
+    add_patient(&phv).await;
+    let path = phv.vault().root().join("records/Patient.ndjson");
+    let first = fs::read_to_string(&path).unwrap();
+    let second = first.replace("\"id\":\"", "\"id\":\"z");
+    fs::write(&path, format!("{first}{second}")).unwrap();
+    let found = codes(&phv).await;
+    assert!(found.contains(&"PHV-PATIENT".to_string()), "{found:?}");
+}
+
+#[tokio::test]
+async fn one_bad_id_gives_one_id_error_and_no_duplicate_or_order_error() {
+    let (_d, phv) = phv().await;
+    let bad = |id: &str| {
+        format!(
+            "{{\"resourceType\":\"Observation\",\"id\":\"{id}\",\"code\":{{\"text\":\"x\"}},\"status\":\"final\"}}\n"
+        )
+    };
+    // Two lines with the same invalid ID, then a missing-ID line, then a valid one out of order.
+    let missing =
+        "{\"resourceType\":\"Observation\",\"code\":{\"text\":\"x\"},\"status\":\"final\"}\n";
+    fs::write(
+        observation_path(&phv),
+        format!("{}{}{missing}{}", bad("b_d"), bad("b_d"), bad("a")),
+    )
+    .unwrap();
+    let found = codes(&phv).await;
+    // Each of the three bad lines gets exactly one PHV-ID.
+    assert_eq!(
+        found.iter().filter(|c| *c == "PHV-ID").count(),
+        3,
+        "{found:?}"
+    );
+    assert!(!found.contains(&"PHV-DUPLICATE".to_string()), "{found:?}");
+    assert!(!found.contains(&"PHV-ORDER".to_string()), "{found:?}");
+}
