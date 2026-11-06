@@ -21,6 +21,9 @@ if [ ! -f "$jar" ]; then
     "https://github.com/hapifhir/org.hl7.fhir.core/releases/download/${VALIDATOR_VERSION}/validator_cli.jar"
 fi
 
-# -tx n/a keeps the check offline: codes are not checked against a terminology server.
+# This uses the HL7 terminology server, tx.fhir.org, and sends it the codes in the
+# synthetic fixture. Without it, the validator cannot tell the IPS pregnancy Observation
+# slices from others, because they differ only by codes in required value sets, so every
+# Observation "matches more than one slice". Never point this script at a real vault.
 java -jar "$jar" "$work/ips.json" -version 4.0.1 -ig hl7.fhir.uv.ips#2.0.0 \
-  -profile http://hl7.org/fhir/uv/ips/StructureDefinition/Bundle-uv-ips -tx n/a
+  -profile http://hl7.org/fhir/uv/ips/StructureDefinition/Bundle-uv-ips
