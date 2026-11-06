@@ -409,6 +409,60 @@ fn the_public_repo_is_refused_in_every_url_form() {
 }
 
 #[test]
+fn the_public_repo_is_refused_when_the_url_is_quoted_or_has_a_comment() {
+    for url in [
+        "\"https://github.com/recodelabs/phv.git\"",
+        "\"git@github.com:recodelabs/phv.git\" # the code",
+        "https://github.com/recodelabs/phv.git # the code",
+        "https://github.com/recodelabs/phv.git; the code",
+        "https://github.com/recodelabs/phv.git#the-code",
+        "  \"https://github.com/recodelabs/phv\"  ",
+    ] {
+        let dir = repo_with_config(&remote(url));
+        assert!(
+            Vault::init(&dir.path().join("inside")).is_err(),
+            "{url} should be refused"
+        );
+    }
+    // A comment does not turn a private repo into the public one, and a quoted `#` is data.
+    for url in [
+        "https://github.com/recodelabs/phv-data.git # recodelabs/phv",
+        "\"https://github.com/recodelabs/phv-data.git\"",
+    ] {
+        let dir = repo_with_config(&remote(url));
+        assert!(
+            Vault::init(&dir.path().join("inside")).is_ok(),
+            "{url} should be allowed"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_into_the_public_repo_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(repo.join(".git")).unwrap();
+    fs::write(
+        repo.join(".git/config"),
+        remote("git@github.com:recodelabs/phv.git"),
+    )
+    .unwrap();
+    fs::create_dir_all(repo.join("sub")).unwrap();
+    let link = dir.path().join("link");
+    std::os::unix::fs::symlink(repo.join("sub"), &link).unwrap();
+    // The vault folder does not exist yet; only `link` does.
+    assert!(Vault::init(&link.join("data")).is_err());
+    assert!(!repo.join("sub/data").exists());
+    // A link to a folder outside the repo is still allowed.
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    let ok_link = dir.path().join("ok-link");
+    std::os::unix::fs::symlink(&outside, &ok_link).unwrap();
+    assert!(Vault::init(&ok_link.join("data")).is_ok());
+}
+
+#[test]
 fn similar_repo_names_are_allowed() {
     for url in [
         "git@github.com:recodelabs/phv-data.git",

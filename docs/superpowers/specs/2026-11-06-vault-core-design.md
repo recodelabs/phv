@@ -42,7 +42,7 @@ ben = "/Users/example/health-vaults/ben"
 
 `phv init PATH` creates a data repo layout. It refuses to run inside a checkout whose `origin` remote is `recodelabs/phv`, and every command refuses a directory without `phv.toml`. This guards against personal data reaching the public code repo. The code repo's `.gitignore` also excludes `/records/`, `/sources/` and `/phv.toml`.
 
-Git is optional, and no phv command needs it to work. Only `phv setup` runs `git` or `gh`, and only after the person agrees. In a vault with Git, the person reviews with `git diff` and commits what they accept, so an uncommitted change is an unreviewed change. Whether phv should later commit on the person's behalf is an open decision for a future sub-project.
+Git is optional, and no phv command needs it to work. Only `phv setup` runs `git` or `gh`, and only after the person agrees. In a vault with Git, the person reviews with `git -C <vault> status`, then `git -C <vault> add -N . && git -C <vault> diff` (plain `git diff` shows nothing for a new file, and `add -N` makes new files appear in it), and commits what they accept with `git -C <vault> add -A && git -C <vault> commit -m "..."`, so an uncommitted change is an unreviewed change. Whether phv should later commit on the person's behalf is an open decision for a future sub-project.
 
 Without Git, a vault has no history and no undo. The person's confirmation before a write is the only review, and `phv replace` and `phv rm` warn that they cannot be undone.
 
@@ -284,7 +284,7 @@ The flow:
 4. `phv validate` checks the Bundle. Claude fixes errors and validates again.
 5. The skill shows the person a table of what it extracted, next to what the report says, and asks for confirmation.
 6. `phv add --source SHA256 --agent phv-add-lab` writes the records.
-7. If the vault has Git, the skill tells the person to review with `git diff` and commit. Otherwise it says the write is final, with no history to undo it.
+7. If the vault has Git, the skill tells the person to review with `git -C <vault> status` and `git -C <vault> add -N . && git -C <vault> diff`, then commit with `git -C <vault> add -A && git -C <vault> commit`. Otherwise it says the write is final, with no history to undo it.
 
 Rules the skill states:
 

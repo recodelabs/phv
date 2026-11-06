@@ -211,7 +211,11 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             let mut registry = crate::setup::load_registry(&home)?;
             registry.use_vault(name)?;
             crate::setup::save_registry(&home, &registry)?;
-            println!("default vault is now {name}");
+            if cli.json {
+                print_json(&serde_json::json!({"default": name}))?;
+            } else {
+                println!("default vault is now {name}");
+            }
             return Ok(ExitCode::SUCCESS);
         }
         _ => {}

@@ -163,7 +163,52 @@ fn is_public_remote(value: &str) -> bool {
             .is_some_and(|before| before.ends_with('/') || before.ends_with(':'))
 }
 
+/// A git config value as git reads it: quotes removed, and an unquoted `#` or `;` starts
+/// a comment.
+fn config_value(raw: &str) -> String {
+    let mut value = String::new();
+    let mut quoted = false;
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => quoted = !quoted,
+            '\\' => match chars.next() {
+                Some('n') => value.push('\n'),
+                Some('t') => value.push('\t'),
+                Some(other) => value.push(other),
+                None => {}
+            },
+            '#' | ';' if !quoted => break,
+            other => value.push(other),
+        }
+    }
+    value.trim().to_string()
+}
+
+/// The path with symlinks resolved as far as it exists: the deepest existing ancestor is
+/// canonicalized and the rest is appended, so a link into the repo is seen for what it is.
+fn resolve_existing(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut current = path;
+    loop {
+        if let Ok(canonical) = fs::canonicalize(current) {
+            return rest
+                .iter()
+                .rev()
+                .fold(canonical, |resolved, name| resolved.join(name));
+        }
+        match (current.parent(), current.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name);
+                current = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
 fn is_public_code_repo(path: &Path) -> bool {
+    let path = resolve_existing(path);
     for dir in path.ancestors() {
         if let Some(config) = git_config_for(dir) {
             // Match the exact repo, so a private repo such as recodelabs/phv-data is allowed.
@@ -175,7 +220,7 @@ fn is_public_code_repo(path: &Path) -> bool {
                 line[key.len()..]
                     .trim_start()
                     .strip_prefix('=')
-                    .is_some_and(is_public_remote)
+                    .is_some_and(|value| is_public_remote(&config_value(value)))
             });
         }
     }

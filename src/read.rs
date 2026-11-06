@@ -32,11 +32,15 @@ impl SearchResult {
     }
 }
 
-fn check_resource_type(resource_type: &str) -> Result<(), PhvError> {
-    let known = get_schemas(FhirVersion::R4)
+/// True only for the exact, case-sensitive name of a concrete R4 resource type.
+pub(crate) fn is_known_resource_type(resource_type: &str) -> bool {
+    get_schemas(FhirVersion::R4)
         .get(resource_type)
-        .is_some_and(|s| s.kind == "resource" && s.abstract_type != Some(true));
-    if known {
+        .is_some_and(|s| s.kind == "resource" && s.abstract_type != Some(true))
+}
+
+pub(crate) fn check_resource_type(resource_type: &str) -> Result<(), PhvError> {
+    if is_known_resource_type(resource_type) {
         Ok(())
     } else {
         Err(PhvError::Usage(format!(
@@ -52,16 +56,6 @@ impl Phv {
         self.vault()
             .get(resource_type, id)?
             .ok_or_else(|| PhvError::NotFound(format!("{resource_type}/{id}")))
-    }
-
-    /// Stored lines for a type, in ID order, with unanswered records left out silently.
-    /// Prefer `search`, which reports them.
-    pub async fn list(
-        &self,
-        resource_type: &str,
-        filter: Option<&str>,
-    ) -> Result<Vec<String>, PhvError> {
-        Ok(self.search(resource_type, filter).await?.lines)
     }
 
     /// Stored lines for a type, in ID order. `filter` keeps resources where a FHIRPath
