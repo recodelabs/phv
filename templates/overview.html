@@ -3,7 +3,7 @@
 {% block main %}
 <h1>{{ chrome.person }}</h1>
 <p class="sub">{% if let Some(born) = &view.birth_date %}Born {{ born }} · {% endif %}{{ record_count }} records · {{ document_count }} documents</p>
-{% if view.measures.is_empty() %}
+{% if view.measures.is_empty() && view.latest_steps.is_none() %}
 <p>No vitals yet.</p>
 {% else %}
 <div class="tiles">
@@ -13,6 +13,12 @@
     <span>{{ m.latest.name }} · {{ m.latest.date }}</span>
   </div></a>
   {% endfor %}
+  {% if let Some(steps) = &view.latest_steps %}
+  <a class="tile-link" href="/v/{{ chrome.vault }}/activity"><div class="tile">
+    <b>{{ steps.steps }}</b>
+    <span>Steps · {{ steps.date }}</span>
+  </div></a>
+  {% endif %}
 </div>
 {% endif %}
 <h2>Latest lab report</h2>

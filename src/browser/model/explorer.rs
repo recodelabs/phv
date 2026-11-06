@@ -1,5 +1,6 @@
 //! All FHIR: every record of every type, and the topic page that shows each one.
 
+use super::activity;
 use super::clinical::verified_in_error;
 use super::labs::{is_lab_observation, is_lab_report};
 use super::observation::{clinical_date, is_entered_in_error};
@@ -117,6 +118,7 @@ pub fn topic_of(resource: &Value, observations: &[Value]) -> Option<(&'static st
     match resource["resourceType"].as_str()? {
         "Observation" if is_vital(resource) => simple("Vitals", "vitals"),
         "Observation" if is_lab_observation(resource) => simple("Labs", "labs"),
+        "Observation" if activity::is_shown(resource) => simple("Activity", "activity"),
         "DiagnosticReport" if is_lab_report(resource, observations) => Some((
             "Labs",
             format!("labs/reports/{}", encode_segment(&id_of(resource))),

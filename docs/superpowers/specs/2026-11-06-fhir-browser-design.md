@@ -1,21 +1,22 @@
 # phv FHIR browser design
 
-The FHIR browser is a local, read-only web interface for looking through a phv vault. It shows health records in everyday terms, such as vitals and lab reports, and keeps the underlying FHIR one click away. It replaces the first part of sub-project 6 in the vault core design.
+The FHIR browser is a local, read-only web interface for looking through a phv vault. It shows health records in everyday terms, such as vitals and lab reports, and keeps the underlying FHIR one click away. It replaces sub-project 6 in the vault core design.
 
 ## Goals
 
 - Let a person find their current vitals, lab results, conditions, medicines, allergies, vaccines and original documents without knowing FHIR.
 - Never hide a record: anything without a topic view stays reachable under All FHIR.
 - Show what the record says, exactly as stored, without judging or converting it.
-- Stay a single Rust binary that makes no outbound connections and needs no Node, warehouse or Git.
+- Stay a single Rust binary that makes no outbound connections and needs no Node, warehouse or Git. Pages query the vault's files directly.
 
 ## Non-goals for the first version
 
 | Not in this version | Why or where it goes |
 |---|---|
-| Web input of any kind: upload, edit, delete, recategorize | Agent skills and the `phv` CLI do this |
-| Analytics, charts and trends | Later, on top of these pages |
-| Parquet warehouse and fhir-pipes-rs | Only needed once analytics arrive |
+| Web input of any kind: upload, edit, delete, recategorize | Agent skills and the `phv` CLI do this. HealthKit upload may come back later |
+| Trends, goals and judgments about activity or health | Not planned for now |
+| Charts outside Activity | Later, if a topic needs them |
+| A data warehouse | Not needed. Pages query the vault's files directly |
 | Timeline view | Could be added later as another view of the same data |
 | Search across all records | Later, if browsing proves too slow |
 | Hosted or remote access, login | Deferred, laptop only |
@@ -77,6 +78,7 @@ All routes are GET.
 | `/v/{vault}/labs/reports/{id}` | One report with its results |
 | `/v/{vault}/labs/tests/{test}` | History of one test |
 | `/v/{vault}/conditions`, `medicines`, `allergies`, `vaccines` | One list each |
+| `/v/{vault}/activity?year=&month=&type=` | Steps and workouts |
 | `/v/{vault}/documents?category=` | Catalog of original files |
 | `/v/{vault}/sources/{sha256}` | The original file |
 | `/v/{vault}/fhir` | Resource types with counts |
@@ -106,6 +108,7 @@ A record's topic comes only from what the record states, never from guessing at 
 | Medicines | `MedicationStatement`, `MedicationRequest` |
 | Allergies | `AllergyIntolerance` |
 | Vaccines | `Immunization` |
+| Activity | Daily steps and workouts. See [Activity](#activity) |
 | Documents | `DocumentReference` |
 | All FHIR only | Everything else, including an `Observation` with no category and a `DiagnosticReport` that is not a lab report |
 
@@ -143,6 +146,31 @@ There is one tile per measure, showing its newest record. Blood pressure, heart 
 - Below a record's JSON, each reference is listed, as a link when it resolves locally and as plain text otherwise. This keeps the JSON itself fully escaped.
 - A record's page names the topic that shows it, if any.
 - A medicine's name comes from `medicationCodeableConcept`, then the referenced `Medication`, then the reference's `display`, then "Unnamed medicine".
+
+## Activity
+
+The Activity page shows steps and workouts imported by `phv import apple-activity`. It reads the vault's files on each request, like every other page. The HealthKit export carries about 3,000 days and 800 workouts, which this handles easily.
+
+**Records:** Observations with category `activity`. Steps have LOINC `41950-7`. A workout is a panel with code `PAPanel`, whose `hasMember` records hold its type, duration, calories and distance.
+
+**Drill-down:** All years, then one year's months, then one month's days. Query parameters are `year` and `month`, and a value that is not a real year and month is a 404. Each level has total steps, the average per recorded day, days recorded, a chart and a table.
+
+**Workouts:** distance by activity for the period, largest first, with workout count and time. Activities with no distance stay in the table. Choosing an activity through `type` filters the workout list and, except at the month level, adds a chart of that activity's distance over the period. The list shows the newest 100, and a note says to pick a period for the rest.
+
+**Limit on distance:** distances come only from recorded workouts, because the importer stores daily steps but no daily distance. The page says so, because "Walking" does not mean all walking.
+
+**Worked-out values:** these are the only numbers phv calculates. Exact stored values stay in the FHIR view.
+
+- **Gaps:** a day with no record means no data. It is not zero, so it does not lower the average, and it leaves a gap in the chart.
+- **Dates:** grouped by the date as written, with no time zone conversion.
+- **Friendly units:** duration shows as `1 h 12 min`, distance as `5.20 km` and calories as whole `kcal`. This applies only when the stored UCUM code is the expected `min`, `m` or `kcal`. Any other unit shows as stored and is left out of totals. This is the one exception to units never being converted.
+- **Duplicate days:** if a date has two step records, the larger is used and a notice appears, so a second source cannot double count.
+- **Unusable records:** a step record with no usable date or whole-number count is left out and counted in a notice, not guessed at.
+- **Entered in error:** left out of totals, like other topics.
+
+**Charts:** Observable Plot 0.6.19 and d3 7.9.2, embedded in the binary from `assets/` and loaded only on this page. `assets/activity.js` draws each chart from the table on the page, so there is no separate data route, and with JavaScript off the tables stay open and everything still works. Bars with a next level are links. Plot adds a `style` element that the page's policy forbids, so the script removes it before the chart reaches the page, and `style.css` holds those rules. The policy is unchanged.
+
+The Overview adds a tile with the latest day's steps.
 
 ## Documents
 
@@ -208,5 +236,6 @@ All test data is synthetic. `tests/fixtures/browser-vault/` is a small handwritt
 5. Labs.
 6. Conditions, medicines, allergies and vaccines.
 7. Overview, which gathers the topics above.
-8. The `phv source add` changes, once vault core Task 8 is merged.
-9. Mount the browser in `phv serve`, once vault core Task 12 is merged.
+8. Activity.
+9. The `phv source add` changes, once vault core Task 8 is merged.
+10. Mount the browser in `phv serve`, once vault core Task 12 is merged.

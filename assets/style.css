@@ -9,6 +9,7 @@
   --accent: #1f6f5c;
   --accent-text: #ffffff;
   --flag: #a8480d;
+  --chart: #0f8a6d;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -21,6 +22,7 @@
     --accent: #5cc4a9;
     --accent-text: #10201b;
     --flag: #f0a26b;
+    --chart: #29a886;
   }
 }
 * { box-sizing: border-box; }
@@ -58,6 +60,12 @@ td.history:empty { display: none; }
 .chip { border: 1px solid var(--line); border-radius: 1rem; padding: 0 .7rem; color: var(--text); text-decoration: none; font-size: .85rem; }
 .chip[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .75rem; overflow: auto; font: 13px/1.5 ui-monospace, Menlo, monospace; }
+.crumbs { margin: 0 0 .75rem; color: var(--muted); }
+.phv-plot { display: block; height: auto; max-width: 100%; margin-bottom: .5rem; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; --plot-background: var(--panel); }
+.phv-plot text { white-space: pre; }
+.table-view { margin-bottom: 1rem; }
+.table-view summary { cursor: pointer; color: var(--muted); font-size: .85rem; margin-bottom: .35rem; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 ul.plain { list-style: none; padding: 0; margin: 0; }
 @media (max-width: 40rem) {
   .layout { flex-direction: column; }

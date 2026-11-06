@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Activity{% endblock %}
+{% block scripts %}
+<script defer src="/assets/d3.min.js"></script>
+<script defer src="/assets/plot.min.js"></script>
+<script defer src="/assets/activity.js"></script>
+{% endblock %}
+{% block main %}
+<h1>Activity</h1>
+{% if empty %}
+<p>No activity yet.</p>
+{% else %}
+<p class="crumbs">
+  {% for crumb in &crumbs %}{% if let Some(query) = &crumb.query %}<a href="/v/{{ chrome.vault }}/activity{% if !query.is_empty() %}?{{ query }}{% endif %}">{{ crumb.label }}</a> › {% else %}{{ crumb.label }}{% endif %}{% endfor %}
+</p>
+{% if unusable > 0 %}
+<p class="notice">{{ unusable }} step records have no usable date or count, so they aren't included.</p>
+{% endif %}
+{% if duplicate_days > 0 %}
+<p class="notice">{{ duplicate_days }} days have more than one step record. The largest is used for each.</p>
+{% endif %}
+<div class="tiles">
+  <div class="tile"><b>{{ summary.total }}</b><span>Total steps · {{ title }}</span></div>
+  <div class="tile"><b>{{ summary.average }}</b><span>Average per recorded day</span></div>
+  <div class="tile"><b>{{ summary.days }}</b><span>Days recorded</span></div>
+</div>
+
+<h2>Steps · {{ title }}</h2>
+<details class="table-view" open>
+  <summary>Table</summary>
+  <table data-chart="steps" data-unit="steps">
+    <tr><th>{{ step_heading }}</th><th class="num">Steps</th></tr>
+    {% for b in &steps %}
+    <tr data-x="{{ b.label }}"{% if let Some(value) = &b.value %} data-y="{{ value }}"{% endif %} data-title="{{ b.title }}">
+      <td>{% if let Some(query) = &b.query %}<a href="/v/{{ chrome.vault }}/activity?{{ query }}">{{ b.label }}</a>{% else %}{{ b.label }}{% endif %}</td>
+      <td class="num{% if b.value.is_none() %} muted{% endif %}">{{ b.text }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
+
+{% if !types.is_empty() %}
+<h2>Distance by activity · {{ title }}</h2>
+<p class="sub">Distances come from recorded workouts, so everyday walking outside a workout counts toward steps only.</p>
+<details class="table-view" open>
+  <summary>Table</summary>
+  <table data-chart="distance-type">
+    <tr><th>Activity</th><th class="num">Workouts</th><th class="num">Distance</th><th class="num">Time</th></tr>
+    {% for t in &types %}
+    <tr{% if let Some(km) = &t.chart_km %} data-x="{{ t.name }}" data-y="{{ km }}" data-title="{{ t.name }}"{% endif %}>
+      <td><a href="/v/{{ chrome.vault }}/activity?{{ type_query }}type={{ t.name_url }}">{{ t.name }}</a></td>
+      <td class="num">{{ t.count }}</td>
+      <td class="num">{% if let Some(distance) = &t.distance %}{{ distance }}{% else %}<span class="muted">No distance</span>{% endif %}</td>
+      <td class="num">{{ t.time }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
+{% endif %}
+
+{% if !over_time.is_empty() %}
+<h2>{% if let Some(activity) = &selected %}{{ activity }}{% endif %} distance · {{ title }}</h2>
+<details class="table-view" open>
+  <summary>Table</summary>
+  <table data-chart="distance-time" data-unit="km">
+    <tr><th>{{ over_time_heading }}</th><th class="num">Distance</th></tr>
+    {% for b in &over_time %}
+    <tr data-x="{{ b.label }}"{% if let Some(value) = &b.value %} data-y="{{ value }}"{% endif %} data-title="{{ b.title }}">
+      <td>{{ b.label }}</td>
+      <td class="num{% if b.value.is_none() %} muted{% endif %}">{{ b.text }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
+{% endif %}
+
+<h2>Workouts · {{ title }}{% if let Some(activity) = &selected %} · {{ activity }}{% endif %}</h2>
+{% if chips.len() > 1 %}
+<div class="chips">
+  {% for chip in &chips %}
+  <a class="chip" href="/v/{{ chrome.vault }}/activity{% if !chip.query.is_empty() %}?{{ chip.query }}{% endif %}"{% if chip.on %} aria-current="true"{% endif %}>{{ chip.label }} {{ chip.count }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if workouts.is_empty() %}
+<p>No workouts in this period.</p>
+{% else %}
+<table>
+  <tr><th>Date</th><th>Workout</th><th>Duration</th><th>Distance</th><th>Calories</th></tr>
+  {% for w in &workouts %}
+  <tr>
+    <td>{{ w.date }}</td>
+    <td><a href="/v/{{ chrome.vault }}/fhir/Observation/{{ w.id_url }}">{{ w.activity }}</a></td>
+    <td>{% if let Some(v) = &w.duration %}{{ v }}{% endif %}</td>
+    <td>{% if let Some(v) = &w.distance %}{{ v }}{% endif %}</td>
+    <td>{% if let Some(v) = &w.calories %}{{ v }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% if workout_total > workouts.len() %}
+<p class="sub">Showing the newest {{ workouts.len() }} of {{ workout_total }}. Pick a year or month to see the rest.</p>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

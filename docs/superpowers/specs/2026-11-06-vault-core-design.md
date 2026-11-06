@@ -19,7 +19,6 @@ phv (personal health vault) keeps one person's health records as FHIR R4 files o
 | IPS and narrative summaries, IPS profile validation | Sub-project 4 |
 | HealthKit, Strava and other importers | Sub-project 5 |
 | Web browser for records | Sub-project 6, see `2026-11-06-fhir-browser-design.md` |
-| Parquet warehouse through fhir-pipes-rs, analytics | Sub-project 6, later |
 | Hosted or remote access | Deferred, laptop only |
 | Encryption at rest, Git LFS | Deferred, see Security |
 | More than one person in a vault | Not planned, use one vault per person |
@@ -203,7 +202,7 @@ A health query must not quietly look empty. A record can give no true or false a
 
 `octofhir-fhirpath` 0.5.8 returns no answer for `>=` and `<=` against a date literal, such as `effectiveDateTime >= @2026-03-14`, while `>`, `<` and `=` work. `effectiveDateTime.toDate() >= @2026-03-14` works and also handles date-times, so the docs use that form. A test pins the bug so an upstream fix is noticed.
 
-Analytics queries belong to the warehouse in sub-project 6. For a vault with Git, it is built from the last commit so unreviewed changes stay out. The FHIR browser has no warehouse and reads the working files, so it shows uncommitted records.
+The FHIR browser reads the same working files, so it shows uncommitted records. There is no warehouse for now, since querying the local files is enough.
 
 ## Interfaces
 
@@ -343,7 +342,7 @@ Each gets its own spec and plan.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus limits on what an MCP session can read.
 4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
-6. **Browser and warehouse:** first a read-only FHIR browser, designed in `2026-11-06-fhir-browser-design.md`, with no web input. Later, a Parquet warehouse built with `fhir-pipes refresh` from the last commit, for analytics. `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
+6. **Browser:** a local FHIR browser, designed in `2026-11-06-fhir-browser-design.md`, that queries the vault's files directly, with charts for activity and no web input. A warehouse is not planned for now. If one returns: `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
 
 ### Notes for the importer sub-project
 
