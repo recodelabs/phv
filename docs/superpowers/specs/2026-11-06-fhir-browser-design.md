@@ -110,6 +110,7 @@ A record's topic comes only from what the record states, never from guessing at 
 | Allergies | `AllergyIntolerance` |
 | Vaccines | `Immunization` |
 | Activity | Daily steps and workouts, on two tabs. See [Activity](#activity) |
+| Claims | `ExplanationOfBenefit` |
 | Documents | `DocumentReference` |
 | All FHIR only | Everything else, including an `Observation` with no category and a `DiagnosticReport` that is not a lab report |
 

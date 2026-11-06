@@ -2,3 +2,4 @@
 
 pub mod apple_activity;
 pub mod cli;
+pub mod x12_835;
