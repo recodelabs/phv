@@ -14,7 +14,7 @@ node prototype/fatigue/server.mjs
 
 Open [the local preview](http://127.0.0.1:4280/). Stop with Ctrl-C. Choose another port using `--port 4281` if needed. On this Mac, `/opt/homebrew/bin/node` is the tested working binary; a bundled Node may require a newer macOS.
 
-The preview serves explicit demo assets on loopback. When started with `--vault`, it also reads snapshots from that one configured synthetic vault. It does not expose arbitrary paths, import personal records, write a vault, call an AI API, or contact a terminology service. Nothing is saved across page reloads. Reference links navigate to the external guideline publishers only when opened.
+The preview serves explicit demo assets on loopback. With `--vault`, it reads snapshots from one configured synthetic vault. With `--personal-case`, it reads a private, curated lab manifest and its explicitly allowlisted original PDFs, as described below. It does not expose arbitrary paths, write a vault, call an AI API, or contact a terminology service. Nothing is saved across page reloads. Reference links navigate to the external guideline publishers only when opened.
 
 ## Try the full path
 
@@ -105,3 +105,29 @@ The JSON snapshot is a read interface, not a substitute for `phv check` or full 
 The trace includes vault snapshot identity, capture time, adapter/mapping versions, patient binding, raw file hashes, per-record hashes and session review states. These hashes describe the synthetic vault, not clinical-guideline documents. Framework approval remains draft.
 
 Run the full integration suite after building with the `PHV_TEST_BINARY` command above. Without that environment variable, the real-import test is explicitly skipped. Rust coverage lives in `tests/snapshot.rs`. CI builds the binary and runs the Node integration suite as well as the Rust tests.
+
+
+## Real lab results with a hypothetical concern
+
+The personal lab demo is a separate mode from the synthetic engine and vault adapter. It reads a curated extract from original reports, not a complete FHIR vault, and does not add symptoms or answers to any health record. The synthetic-only restrictions remain in place for the existing synthetic mode.
+
+Start it with a private manifest outside this code repository:
+
+```sh
+node prototype/fatigue/server.mjs --port 4282 --personal-case /absolute/private/folder/case.json
+```
+
+Open [the personal demo](http://127.0.0.1:4282/). Review each selected result, inspect its printed name/value/unit/range and original PDF, then mark it checked. Continue to enter a hypothetical fatigue concern manually, or insert the provided concern. Answer onset, impact, September fasting status, sleep, medication account and optional appointment goal. Unknown and skipped answers remain explicit. The questions and selected evidence are curated for this specific scenario; free text does not drive clinical inference.
+
+The brief and exports separate real report findings, hypothetical answers and hypothetical wording corrections. A wording correction adds a statement alongside the original finding, preserving the source fact. Removing an edited result requires confirming removal of its dependent correction. Reopening reports or refreshing clears answers, corrections and review choices. Downloads persist only when explicitly requested through the export controls.
+
+The server supports only GET/HEAD, binds to loopback, checks Host/Origin, sends `no-store` and never receives interview answers. Before each new revision, the browser checks the manifest/source fingerprint. Changed or unavailable input blocks the new revision and retains the preceding draft. Reopen and review the records to use changed input. Original PDFs are checked against their pinned SHA-256 hashes on every read. Local paths are omitted from browser responses and exports. Only configured source IDs are served.
+
+Private manifest contract (`schemaVersion: 1`, `mode: "personal_lab_demo"`):
+
+- `documents`: 1–12 entries with unique `id` (lowercase letters, digits, hyphens), neutral `title`, absolute PDF `path`, pinned `sha256` and optional `dateNote`.
+- `evidence`: up to 100 selected results, each with `id`, `title`, `documentId`, `page`, `date`, `dateBasis`, `printedName`, `printedValue`, `printedUnit`, `referenceRange`, `text`, `demoRole` and `selectionReason`.
+- `demoRole` is `focus`, `context` or `outside_focus`. Checked focus/context items enter the brief; outside-focus items remain available with their exclusion reason. Review checks confirm the extraction, not clinical relevance.
+- Preserve printed dates and their meaning. Registration/report dates do not establish collection time. Preserve original fasting and post-load qualifiers; unknown fasting status remains unknown even if a hypothetical answer says otherwise.
+
+Keep manifests and personal extracts outside the repository. This repository contains generic implementation and entirely invented automated-test data only. The private manifest is a curated presentation artifact; it is never a destination for interview answers. No clinical threshold classification, diagnosis, automatic test ordering or urgency assessment is implemented in this mode.

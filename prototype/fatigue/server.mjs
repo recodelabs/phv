@@ -2,18 +2,21 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { readVaultSnapshot } from './vault-adapter.mjs';
+import { readPersonalCase } from './personal-case.mjs';
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']],
   ['/engine.mjs', ['engine.mjs', 'text/javascript; charset=utf-8']],
+  ['/personal-engine.mjs', ['personal-engine.mjs', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
   ['/fixture.json', ['fixture.json', 'application/json; charset=utf-8']],
 ]);
 
 // Serve only this demo's explicit assets, never the repository or patient_files.
 export function createPreviewServer(options = {}) {
+  if (options.personalCase && options.vaultPath) throw new Error('Choose either a synthetic vault or a personal demo.');
   return http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -45,9 +48,25 @@ export function createPreviewServer(options = {}) {
       response.end();
       return;
     }
+    if (pathname === '/personal-case' || pathname.startsWith('/personal-source/')) {
+      if (!options.personalCase) { response.writeHead(404); response.end(); return; }
+      try {
+        const {fixture, files} = await readPersonalCase(options.personalCase);
+        const sourceId = pathname.slice('/personal-source/'.length);
+        const bytes = pathname === '/personal-case' ? Buffer.from(JSON.stringify(fixture)) : files.get(sourceId);
+        if (!bytes) { response.writeHead(404); response.end(); return; }
+        response.writeHead(200, {'Content-Type': pathname === '/personal-case' ? 'application/json; charset=utf-8' : 'application/pdf', 'Content-Length': bytes.length,
+          ...(pathname === '/personal-case' ? {} : {'Content-Disposition': `inline; filename="report-${sourceId}.pdf"`})});
+        response.end(request.method === 'HEAD' ? undefined : bytes);
+      } catch {
+        response.writeHead(409, {'Content-Type': 'application/json; charset=utf-8'});
+        response.end(JSON.stringify({error: 'The private demo or its original PDFs changed or are unavailable. Check the configured manifest and source hashes, then reopen the reports.'}));
+      }
+      return;
+    }
     if (pathname === '/preview-config' || pathname === '/vault-snapshot') {
       try {
-        const value = pathname === '/preview-config' ? {vaultEnabled: Boolean(options.vaultPath)} : await readVaultSnapshot(options);
+        const value = pathname === '/preview-config' ? {vaultEnabled: Boolean(options.vaultPath), personalEnabled: Boolean(options.personalCase)} : await readVaultSnapshot(options);
         const bytes = Buffer.from(JSON.stringify(value));
         response.writeHead(200, {'Content-Type': 'application/json; charset=utf-8', 'Content-Length': bytes.length});
         response.end(request.method === 'HEAD' ? undefined : bytes);
@@ -82,12 +101,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       if (args[i] === '--port' && args[i + 1]) port = Number(args[++i]);
       else if (args[i] === '--vault' && args[i + 1]) options.vaultPath = args[++i];
       else if (args[i] === '--phv-bin' && args[i + 1]) options.phvBinary = args[++i];
-      else throw new Error('Usage: node server.mjs [--port 4280] [--vault SYNTHETIC_VAULT --phv-bin PHV_BINARY]');
+      else if (args[i] === '--personal-case' && args[i + 1]) options.personalCase = args[++i];
+      else throw new Error('Usage: node server.mjs [--port 4280] [--vault SYNTHETIC_VAULT --phv-bin PHV_BINARY | --personal-case PRIVATE_MANIFEST]');
     }
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Choose a port between 1 and 65535.');
     const server = createPreviewServer(options);
     server.on('error', error => { console.error(`Could not start preview: ${error.code ?? error.message}`); process.exitCode = 1; });
-    server.listen(port, '127.0.0.1', () => console.log(`Synthetic fatigue preview: http://127.0.0.1:${port}/`));
+    server.listen(port, '127.0.0.1', () => console.log(`Local fatigue ${options.personalCase ? 'personal lab demo' : 'synthetic preview'}: http://127.0.0.1:${port}/`));
     for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close());
   } catch (error) { console.error(error.message); process.exitCode = 2; }
 }
