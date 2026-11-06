@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="phv logo: a folder shaped like a shield with a medical cross" width="140">
+  <img src="assets/logo.svg" alt="phv logo: a folder shaped like a shield with a medical cross" width="140">
 </p>
 
 # phv: personal health vault
