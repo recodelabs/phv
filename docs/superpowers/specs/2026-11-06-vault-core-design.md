@@ -262,15 +262,15 @@ Each server serves one vault, so a session connected for one family member canno
 
 | Tool | Purpose |
 |---|---|
-| `vault_info` | Show the vault's path and `Patient` |
+| `vault_info` | Show the vault's path and the person's name and birth date, so a session can confirm it has the right person |
 | `source_add` | Store a document from a path on this machine |
 | `validate` | Check a resource or Bundle without writing |
 | `add` | Same as `phv add` |
 | `replace` | Same as `phv replace` |
-| `get`, `list` | Read records, with an optional FHIRPath filter |
+| `get`, `list` | Read records, with an optional FHIRPath filter. `list` returns at most `limit` records, 50 by default, and says when it stopped early |
 | `check` | Check the whole vault |
 
-There is no removal tool, so an AI session cannot delete records. `resource_json` is JSON text rather than parsed arguments, so duplicate keys are still rejected and decimals stay exact. Uploads are by path, because sending file contents as a tool argument would pass them through the model.
+There is no removal tool, so an AI session cannot delete records. `resource_json` is JSON text rather than parsed arguments, so duplicate keys are still rejected and decimals stay exact. Uploads are by absolute path to a regular file, because sending file contents as a tool argument would pass them through the model, and a device or FIFO could hang the server.
 
 The server runs locally, but Claude runs on Anthropic's servers, so anything a tool returns goes to Anthropic. Keeping data on the device needs a local model. This server has no limits on what a session can read, and sub-project 3 covers those.
 

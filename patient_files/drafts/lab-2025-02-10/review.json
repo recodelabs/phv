@@ -1,0 +1,40 @@
+{
+  "status": "draft—not imported",
+  "source": {
+    "path": "../../eugene_kogan/2025 02 норма - Липидограмма глюкоза АЛТ АСТ.pdf",
+    "sha256": "e94ffbe897d1ced887c8ba45c69adc04dd5f2b90e32c177c8472382dced836d6",
+    "pages": [
+      1
+    ]
+  },
+  "patient": "Pseudonymous draft Patient; reconcile with the selected vault Patient before import. No demographics or insurance identifiers copied.",
+  "printed_dates": {
+    "Дата анализа": "10.02.2025",
+    "Дата печати": "10.02.2025 20:17:54"
+  },
+  "mapping_notes": [
+    "Analysis date does not explicitly establish specimen collection date; effectiveDateTime omitted. Original label retained in Observation notes.",
+    "Print time has no timezone and does not establish report release time; issued omitted.",
+    "Clinical status not explicit; status unknown used. Draft describes extraction workflow, not clinical report status.",
+    "DiagnosticReport.code.text joins the three printed section headings; Observation notes retain section membership.",
+    "Decimal commas normalized to decimal points; original representations retained in review.csv.",
+    "Strict inequality ranges and sex-specific ranges preserved as text. Two interval ranges also have numeric low/high.",
+    "No printed unit for the atherogenic coefficient; unit omitted.",
+    "No printed H/L flags or LOINC/UCUM codes added.",
+    "Attachment references the unchanged local PDF; no phv source registration or provenance creation claimed."
+  ],
+  "validation": {
+    "json": "passed",
+    "r4_model": "fhir.resources 6.1.0, FHIR 4.0.1: passed",
+    "internal_references": "passed",
+    "row_coverage": "10 of 10 results; compared with rendered page",
+    "precision_and_units": "passed",
+    "phv": "not run; executable unavailable",
+    "full_invariants_and_terminology": "not run"
+  },
+  "import_requires": [
+    "Resolve draft Patient to vault Patient.",
+    "Review unresolved dates/status without inventing values.",
+    "Validate/register source/submit using implemented phv operations and obtain any required review confirmation."
+  ]
+}
