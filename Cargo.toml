@@ -22,6 +22,8 @@ clap = { version = "4", features = ["derive"] }
 humantime = "2"
 octofhir-fhirpath = { version = "=0.5.8", default-features = false }
 octofhir-fhirschema = { version = "=0.3.37", default-features = false }
+rmcp = { version = "=3.9.0", default-features = false, features = ["server", "macros", "transport-io"] }
+schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 sha2 = "0.10"

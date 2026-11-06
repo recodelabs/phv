@@ -83,6 +83,8 @@ pub enum Command {
         #[arg(long, default_value_t = 8747)]
         port: u16,
     },
+    /// Run a local MCP server over stdio for one vault, for Claude and other AI tools.
+    Mcp,
     /// Import an export from another system.
     Import {
         #[command(subcommand)]
@@ -354,6 +356,10 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         }
         Command::Serve { port } => {
             crate::api::serve(phv, port).await?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Mcp => {
+            crate::mcp::serve(phv).await?;
             Ok(ExitCode::SUCCESS)
         }
     }
