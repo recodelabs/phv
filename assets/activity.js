@@ -210,7 +210,7 @@ for (const table of document.querySelectorAll("table[data-chart]")) {
   const rows = all.filter((r) => r.value !== undefined);
   if (rows.length === 0) continue;
   const details = table.closest("details");
-  const width = details.parentElement.clientWidth;
+  const width = details.clientWidth;
   const svg = Plot.plot({
     className: "phv-plot",
     width,
