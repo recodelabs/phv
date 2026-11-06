@@ -138,6 +138,11 @@ impl Phv {
     }
 
     pub async fn add(&self, input: &Value, options: &AddOptions) -> Result<WriteReport, PhvError> {
+        if options.source.is_none() && (options.agent.is_some() || options.recorded_at.is_some()) {
+            return Err(PhvError::Usage(
+                "agent and recorded_at only apply together with a source".into(),
+            ));
+        }
         let _lock = self.vault.lock_async().await?;
         let mut resources = prepare(input)?;
 

@@ -254,3 +254,100 @@ async fn only_local_host_and_origin_headers_are_allowed() {
     );
     assert_eq!(with_headers(&[]).await, StatusCode::FORBIDDEN);
 }
+
+#[tokio::test]
+async fn stray_provenance_options_are_refused_and_write_nothing() {
+    let (_d, app, patient) = setup().await;
+    let body = serde_json::to_vec(&lab(&patient, "1.50")).unwrap();
+    for uri in [
+        "/resources?agent=x",
+        "/resources?recorded_at=2026-11-06T12:00:00Z",
+    ] {
+        let (status, out) = send(app.clone(), "POST", uri, body.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
+        assert_eq!(json(&out)["resourceType"], "OperationOutcome");
+    }
+    let (_, listed) = send(app, "GET", "/resources/Observation", vec![]).await;
+    assert!(listed.is_empty());
+}
+
+async fn assert_outcome(app: axum::Router, method: &str, uri: &str, expected: StatusCode) {
+    let (status, out) = send(app, method, uri, vec![]).await;
+    assert_eq!(status, expected, "{method} {uri}");
+    assert_eq!(
+        json(&out)["resourceType"],
+        "OperationOutcome",
+        "{method} {uri}"
+    );
+}
+
+#[tokio::test]
+async fn framework_errors_are_operation_outcomes_too() {
+    let (_d, app, _p) = setup().await;
+    let bad = StatusCode::BAD_REQUEST;
+    assert_outcome(app.clone(), "POST", "/sources", bad).await;
+    assert_outcome(app.clone(), "POST", "/resources?dry_run=1", bad).await;
+    assert_outcome(app.clone(), "PUT", "/resources/Patient/x?dry_run=1", bad).await;
+    assert_outcome(
+        app.clone(),
+        "PATCH",
+        "/resources",
+        StatusCode::METHOD_NOT_ALLOWED,
+    )
+    .await;
+    assert_outcome(
+        app.clone(),
+        "DELETE",
+        "/validate",
+        StatusCode::METHOD_NOT_ALLOWED,
+    )
+    .await;
+    assert_outcome(app, "GET", "/nowhere", StatusCode::NOT_FOUND).await;
+}
+
+async fn with_origin(host: &str, origin: Option<&str>) -> StatusCode {
+    let (_d, app, _p) = setup().await;
+    let mut builder = Request::builder()
+        .uri("/resources/Patient")
+        .header("host", host);
+    if let Some(origin) = origin {
+        builder = builder.header("origin", origin);
+    }
+    app.oneshot(builder.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn host_and_origin_are_parsed_strictly() {
+    let forbidden = StatusCode::FORBIDDEN;
+    for host in [
+        "localhost:80@evil.com",
+        "localhost:",
+        "localhost:80a",
+        "localhost:80:81",
+        "127.0.0.1.evil.com",
+        "evil.com#localhost:80",
+        "user@localhost",
+    ] {
+        assert_eq!(with_origin(host, None).await, forbidden, "host {host}");
+    }
+    for origin in [
+        "http://localhost:80@evil.com",
+        "http://localhost:80a",
+        "http://localhost.evil.com",
+        "http://127.0.0.1:@evil.com",
+    ] {
+        assert_eq!(
+            with_origin("localhost:8747", Some(origin)).await,
+            forbidden,
+            "origin {origin}"
+        );
+    }
+    assert_eq!(with_origin("localhost", None).await, StatusCode::OK);
+    assert_eq!(
+        with_origin("127.0.0.1:8747", Some("http://127.0.0.1:3000")).await,
+        StatusCode::OK
+    );
+}

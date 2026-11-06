@@ -94,10 +94,11 @@ async fn add(
     Query(q): Query<AddQuery>,
     body: Bytes,
 ) -> Result<Response, PhvError> {
-    let recorded_at = q.source.as_ref().map(|_| {
-        q.recorded_at.clone().unwrap_or_else(|| {
-            humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string()
-        })
+    // A caller's recorded_at passes through as given, so a stray one is refused by the library.
+    let recorded_at = q.recorded_at.clone().or_else(|| {
+        q.source
+            .as_ref()
+            .map(|_| humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string())
     });
     let options = AddOptions {
         source: q.source,
@@ -188,9 +189,14 @@ async fn add_source(
     Ok(Json(phv.source_add(&q.filename, &body).await?).into_response())
 }
 
+/// Exactly `127.0.0.1` or `localhost`, with an optional all-digit port.
 fn is_local(host: &str) -> bool {
-    let name = host.rsplit_once(':').map_or(host, |(name, _)| name);
-    name == "127.0.0.1" || name == "localhost"
+    let (name, port) = match host.split_once(':') {
+        Some((name, port)) => (name, Some(port)),
+        None => (host, None),
+    };
+    let port_ok = port.is_none_or(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    port_ok && (name == "127.0.0.1" || name == "localhost")
 }
 
 /// Stops a web page in the person's browser from reaching the API.
@@ -219,6 +225,37 @@ async fn local_only(request: Request, next: Next) -> Response {
     }
 }
 
+const MAX_ERROR_BODY_BYTES: usize = 4096;
+
+/// Rewrites the framework's plain-text errors (bad query, body too large, no such route or
+/// method) as an OperationOutcome with the same status.
+async fn errors_as_outcomes(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    let status = response.status();
+    let is_fhir = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("application/fhir+json"));
+    if !(status.is_client_error() || status.is_server_error()) || is_fhir {
+        return response;
+    }
+    let bytes = axum::body::to_bytes(response.into_body(), MAX_ERROR_BODY_BYTES)
+        .await
+        .unwrap_or_default();
+    let text = String::from_utf8_lossy(&bytes).trim().to_string();
+    let text = if text.is_empty() {
+        status.canonical_reason().unwrap_or("error").to_string()
+    } else {
+        text
+    };
+    simple(status, "invalid", &text)
+}
+
+async fn no_such_route() -> Response {
+    simple(StatusCode::NOT_FOUND, "not-found", "no such route")
+}
+
 pub fn router(phv: AppState) -> Router {
     Router::new()
         .route("/validate", post(validate))
@@ -229,8 +266,10 @@ pub fn router(phv: AppState) -> Router {
             get(read_one).put(replace).delete(remove),
         )
         .route("/sources", post(add_source))
+        .fallback(no_such_route)
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
         .layer(middleware::from_fn(local_only))
+        .layer(middleware::from_fn(errors_as_outcomes))
         .with_state(phv)
 }
 

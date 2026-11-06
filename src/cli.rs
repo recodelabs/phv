@@ -266,7 +266,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             dry_run,
         } => {
             let input = read_json(&file)?;
-            let recorded_at = source.as_ref().map(|_| recorded_at.unwrap_or_else(now));
+            let recorded_at = recorded_at.or_else(|| source.as_ref().map(|_| now()));
             let options = AddOptions {
                 source,
                 agent,
