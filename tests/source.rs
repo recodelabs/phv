@@ -448,3 +448,89 @@ async fn an_unreadable_stored_source_record_points_at_check_not_source_add() {
     }
     assert_eq!(records(&phv, "Observation"), "");
 }
+
+#[tokio::test]
+async fn a_source_records_its_category_and_when_it_was_added() {
+    let (_d, phv) = phv().await;
+    let options = phv::source::SourceOptions {
+        category: Some("receipt".into()),
+        added_at: Some("2026-11-06T12:00:00Z".into()),
+    };
+    phv.source_add_with("a.pdf", PDF, &options).await.unwrap();
+    let text = records(&phv, "DocumentReference");
+    assert!(text.contains(r#""code":"receipt""#), "{text}");
+    assert!(
+        text.contains(r#""system":"urn:phv:document-category""#),
+        "{text}"
+    );
+    assert!(text.contains(r#""date":"2026-11-06T12:00:00Z""#), "{text}");
+}
+
+#[tokio::test]
+async fn a_source_without_options_has_no_category_or_date() {
+    let (_d, phv) = phv().await;
+    phv.source_add("a.pdf", PDF).await.unwrap();
+    let text = records(&phv, "DocumentReference");
+    assert!(!text.contains("category"), "{text}");
+    assert!(!text.contains(r#""date""#), "{text}");
+}
+
+#[tokio::test]
+async fn an_unknown_category_is_refused_and_stores_nothing() {
+    let (_d, phv) = phv().await;
+    for category in ["uncategorized", "nonsense"] {
+        let options = phv::source::SourceOptions {
+            category: Some(category.into()),
+            added_at: None,
+        };
+        let error = phv
+            .source_add_with("a.pdf", PDF, &options)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, PhvError::Usage(_)), "{category}");
+    }
+    assert_eq!(records(&phv, "DocumentReference"), "");
+}
+
+#[tokio::test]
+async fn adding_the_same_file_again_keeps_the_first_category() {
+    let (_d, phv) = phv().await;
+    let first = phv::source::SourceOptions {
+        category: Some("lab".into()),
+        added_at: None,
+    };
+    let second = phv::source::SourceOptions {
+        category: Some("receipt".into()),
+        added_at: None,
+    };
+    phv.source_add_with("a.pdf", PDF, &first).await.unwrap();
+    let again = phv.source_add_with("a.pdf", PDF, &second).await.unwrap();
+    assert!(again.already_imported);
+    assert!(records(&phv, "DocumentReference").contains(r#""code":"lab""#));
+}
+
+#[tokio::test]
+async fn the_browser_catalog_reads_what_source_add_writes() {
+    let (_d, phv) = phv().await;
+    let options = phv::source::SourceOptions {
+        category: Some("receipt".into()),
+        added_at: Some("2026-11-06T12:00:00Z".into()),
+    };
+    phv.source_add_with("a.pdf", PDF, &options).await.unwrap();
+    let app = phv::browser::router(phv::browser::Vaults::single(
+        phv.vault().root().to_path_buf(),
+    ));
+    let request = axum::http::Request::builder()
+        .uri("/v/vault/documents?category=receipt")
+        .header("host", "127.0.0.1")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+    let bytes = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    let html = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(html.contains("a.pdf"), "{html}");
+    assert!(html.contains("6 Nov 2026"), "{html}");
+}

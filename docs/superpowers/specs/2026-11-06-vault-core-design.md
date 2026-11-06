@@ -184,6 +184,8 @@ Default features are disabled on both octofhir crates, keeping HTTP clients out 
 - `status`: `current`.
 - `content[0].attachment`: `contentType` from the extension, and `url` set to the relative path.
 - `subject`: the vault's `Patient`, when one exists.
+- `category`: from `--category`, one of `lab`, `receipt`, `visit-note`, `imaging` or `other`, with system `urn:phv:document-category`. Optional. Adding the same file again keeps the first category.
+- `date`: when the file was added. The clock is read in the CLI and API layer, as with `Provenance.recorded`.
 
 Adding the same file again changes no records and reports the existing `DocumentReference`, which warns the person that it has already been imported. If the stored file is missing or damaged, the same call restores it. Re-running AI on a source may still produce different resources, so the warning is what stops accidental duplicates.
 
