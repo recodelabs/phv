@@ -973,6 +973,16 @@ fn month_period(date: &str) -> Option<Period> {
     Some(Period::Month(year.to_string(), month))
 }
 
+impl Period {
+    /// The steps calendar shows one year: the chosen one, or the latest under All years.
+    pub fn steps_calendar_period(&self, days: &[StepDay]) -> Period {
+        match (self, days.last().and_then(|day| day.date.get(..4))) {
+            (Period::All, Some(year)) => Period::Year(year.to_string()),
+            _ => self.clone(),
+        }
+    }
+}
+
 pub fn step_calendar(days: &[StepDay], period: &Period) -> Vec<CalendarDay> {
     days.iter()
         .filter(|day| period.contains(&day.date))

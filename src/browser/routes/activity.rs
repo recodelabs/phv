@@ -41,6 +41,7 @@ struct StepsPage {
     summary: StepSummary,
     steps: Vec<Bucket>,
     has_steps: bool,
+    calendar_heading: String,
     calendar: Vec<CalendarDay>,
 }
 
@@ -63,6 +64,7 @@ struct WorkoutsPage {
     totals: ActivityTotals,
     over_time: Vec<Bucket>,
     over_time_is_distance: bool,
+    calendar_heading: String,
     calendar: Vec<CalendarDay>,
     workouts: Vec<Workout>,
     workout_total: usize,
@@ -111,6 +113,7 @@ async fn steps_page(
             .unwrap_or(period.default_level());
         let data = step_days(&observations(cx)?);
         let steps = buckets_of_steps(&data.days, &period, level);
+        let calendar_period = period.steps_calendar_period(&data.days);
         render(StepsPage {
             chrome: cx.chrome()?,
             path: format!("/v/{}/activity", cx.vault_name),
@@ -126,10 +129,11 @@ async fn steps_page(
             summary: summary(&data.days, &period),
             has_steps: steps.iter().any(|b| b.value.is_some()),
             steps,
+            calendar_heading: format!("Calendar · {}", calendar_period.title()),
             calendar: if matches!(period, Period::Month(..)) {
                 Vec::new()
             } else {
-                step_calendar(&data.days, &period)
+                step_calendar(&data.days, &calendar_period)
             },
         })
     })
@@ -211,6 +215,7 @@ async fn workouts_page(
             totals: chosen_totals,
             over_time,
             over_time_is_distance,
+            calendar_heading: "Calendar".to_string(),
             calendar: if matches!(period, Period::Month(..)) {
                 Vec::new()
             } else {

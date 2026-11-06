@@ -173,7 +173,7 @@ The Activity page shows steps and workouts imported by `phv import apple-activit
 - **With an activity chosen:** a chart of its distance over the period, or of time for an activity with no distance.
 - **Workout list:** the newest 100, with a note to pick a period for the rest.
 
-**Calendar:** both tabs show a GitHub-style calendar for the selected year, or one row per year under All years. A month has none, because its daily chart already covers it. Steps shade by the day's count, and workouts by the day's minutes, following the chosen activity. Each shade holds a quarter of the recorded days in view, so the shades compare days and do not judge them. A day with no record has its own empty color and is never shown as low. Clicking a day opens its month.
+**Calendar:** both tabs show a GitHub-style calendar. The Steps tab shows one year: the selected one, or the latest under All years. The Workouts tab shows the selected year, or one row per year under All years. A month has none, because its daily chart already covers it. Steps shade by the day's count, and workouts by the day's minutes, following the chosen activity. Each shade holds a quarter of the recorded days in view, so the shades compare days and do not judge them. A day with no record has its own empty color and is never shown as low. Clicking a day opens its month.
 
 **Units:** distances show in kilometers or miles (1 mi = 1,609.344 m). Kilometers are the default. A `phv_unit` cookie remembers the choice, with `SameSite=Strict` and `HttpOnly`. This is the only thing the browser remembers, and it is about display, so nothing is written to the vault.
 

@@ -801,7 +801,7 @@ async fn both_tabs_show_a_calendar_for_a_year_or_all_years_but_not_a_month() {
         for query in ["", "?year=2026"] {
             let html = get(&app, &format!("{path}{query}")).await.text();
             assert!(html.contains(r#"data-chart="calendar""#), "{path}{query}");
-            assert!(html.contains("<h2>Calendar</h2>"), "{path}{query}");
+            assert!(html.contains("<h2>Calendar"), "{path}{query}");
             assert!(
                 html.contains(r#"class="heat-legend" hidden"#),
                 "{path}{query}"
@@ -839,4 +839,44 @@ async fn a_workout_calendar_follows_the_chosen_activity() {
         "{html}"
     );
     assert!(!html.contains(r#"data-x="2026-01-04""#), "{html}");
+}
+
+#[test]
+fn the_steps_calendar_period_is_the_latest_year_under_all_years() {
+    let days = step_days(&fixture("Observation")).days;
+    assert_eq!(
+        Period::All.steps_calendar_period(&days),
+        Period::Year("2026".to_string())
+    );
+    let chosen = period(Some("2025"), None);
+    assert_eq!(
+        chosen.steps_calendar_period(&days),
+        chosen,
+        "a chosen year stays"
+    );
+    assert_eq!(Period::All.steps_calendar_period(&[]), Period::All);
+}
+
+#[tokio::test]
+async fn all_years_shows_only_the_latest_year_on_the_steps_calendar() {
+    let html = get(&app(), STEPS).await.text();
+    assert!(html.contains("<h2>Calendar · 2026</h2>"), "{html}");
+    assert!(html.contains(r#"data-x="2026-02-14""#), "{html}");
+    assert!(!html.contains(r#"data-x="2025-12-30""#), "{html}");
+}
+
+#[tokio::test]
+async fn a_chosen_year_shows_on_the_steps_calendar() {
+    let html = get(&app(), "/v/vault/activity?year=2025").await.text();
+    assert!(html.contains("<h2>Calendar · 2025</h2>"), "{html}");
+    assert!(html.contains(r#"data-x="2025-12-30""#), "{html}");
+    assert!(!html.contains(r#"data-x="2026-02-14""#), "{html}");
+}
+
+#[tokio::test]
+async fn the_workouts_calendar_spans_every_year() {
+    let html = get(&app(), WORKOUTS).await.text();
+    assert!(html.contains("<h2>Calendar</h2>"), "{html}");
+    assert!(html.contains(r#"data-x="2025-12-30""#), "{html}");
+    assert!(html.contains(r#"data-x="2026-02-14""#), "{html}");
 }
