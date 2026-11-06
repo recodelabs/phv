@@ -3,13 +3,22 @@ use std::process::Command;
 #[test]
 fn no_http_clients_or_sqlite_in_the_build() {
     let out = Command::new(env!("CARGO"))
-        .args(["tree", "-e", "normal", "--prefix", "none"])
+        .args([
+            "tree",
+            "--locked",
+            "--target",
+            "all",
+            "-e",
+            "normal,build",
+            "--prefix",
+            "none",
+        ])
         .output()
         .expect("cargo tree runs");
     assert!(out.status.success());
     let tree = String::from_utf8(out.stdout).unwrap();
     assert!(
-        tree.contains("octofhir-fhirschema"),
+        tree.lines().any(|l| l.starts_with("octofhir-fhirschema ")),
         "tree looks wrong: {tree}"
     );
     for banned in ["reqwest ", "ureq ", "rusqlite ", "libsqlite3-sys ", "sqlx "] {
