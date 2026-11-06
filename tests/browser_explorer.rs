@@ -358,3 +358,22 @@ async fn the_logo_is_in_the_header_and_is_the_favicon() {
         "{error}"
     );
 }
+
+#[tokio::test]
+async fn the_site_uses_its_full_name() {
+    let app = app();
+    let page = get(&app, "/v/vault/overview").await.text();
+    assert!(
+        page.contains(r#"height="24">Personal Health Vault (PHV)</span>"#),
+        "{page}"
+    );
+    assert!(
+        page.contains("· Personal Health Vault (PHV)</title>"),
+        "{page}"
+    );
+    let error = get(&app, "/nowhere").await.text();
+    assert!(
+        error.contains("· Personal Health Vault (PHV)</title>"),
+        "{error}"
+    );
+}
