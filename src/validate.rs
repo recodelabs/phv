@@ -5,7 +5,7 @@ use crate::refs::is_valid_id;
 use octofhir_fhirpath::{FhirPathEngine, create_function_registry};
 use octofhir_fhirschema::{
     EmbeddedSchemaProvider, FhirSchema, FhirSchemaElement, FhirValidator, FhirVersion,
-    InMemoryTerminologyService, ValidationError, get_schemas,
+    InMemoryTerminologyService, ValidationError, ValidationResult, get_schemas,
 };
 use serde_json::Value;
 use std::{
@@ -27,25 +27,53 @@ pub struct Validator {
     inner: FhirValidator,
 }
 
+/// An octofhir validator over `schemas`, with the FHIRPath engine and the generated required
+/// code lists. Shared with the IPS checker, which adds profiles to the base schemas.
+pub(crate) async fn octofhir_validator(
+    schemas: HashMap<String, FhirSchema>,
+) -> Result<FhirValidator, PhvError> {
+    let engine = FhirPathEngine::new(
+        Arc::new(create_function_registry()),
+        Arc::new(EmbeddedSchemaProvider::r4()),
+    )
+    .await
+    .map_err(|e| PhvError::Io(std::io::Error::other(e.to_string())))?;
+
+    let mut terminology = InMemoryTerminologyService::new();
+    for (url, codes) in required_value_sets() {
+        for (code, system) in codes {
+            terminology.add_code(&url, &code, Some(&system), None);
+        }
+    }
+
+    Ok(FhirValidator::from_schemas(schemas, Some(Arc::new(engine)))
+        .with_terminology_service(Arc::new(terminology)))
+}
+
+/// The base FHIR R4 schemas.
+pub(crate) fn base_schemas() -> &'static HashMap<String, FhirSchema> {
+    schemas()
+}
+
+/// Findings from one octofhir result, with phv's corrections for known engine problems:
+/// sibling codings that match a required binding, and constraints that fail to evaluate.
+pub(crate) fn findings(resource: &Value, result: &ValidationResult) -> Vec<Issue> {
+    let mut found: Vec<Issue> = without_unmatched_coding_errors(resource, &result.errors)
+        .into_iter()
+        .map(from_error)
+        .collect();
+    found.extend(result.warnings.iter().map(|w| {
+        let e = from_error(w);
+        Issue::warning(&e.code, e.path, e.message)
+    }));
+    found
+}
+
 impl Validator {
     pub async fn new() -> Result<Self, PhvError> {
-        let engine = FhirPathEngine::new(
-            Arc::new(create_function_registry()),
-            Arc::new(EmbeddedSchemaProvider::r4()),
-        )
-        .await
-        .map_err(|e| PhvError::Io(std::io::Error::other(e.to_string())))?;
-
-        let mut terminology = InMemoryTerminologyService::new();
-        for (url, codes) in required_value_sets() {
-            for (code, system) in codes {
-                terminology.add_code(&url, &code, Some(&system), None);
-            }
-        }
-
-        let inner = FhirValidator::from_schemas(schemas().clone(), Some(Arc::new(engine)))
-            .with_terminology_service(Arc::new(terminology));
-        Ok(Self { inner })
+        Ok(Self {
+            inner: octofhir_validator(schemas().clone()).await?,
+        })
     }
 
     /// All findings for one resource, in a stable order.
@@ -101,14 +129,7 @@ impl Validator {
             .inner
             .validate(resource, vec![resource_type.to_string()])
             .await;
-        let mut found: Vec<Issue> = without_unmatched_coding_errors(resource, &result.errors)
-            .into_iter()
-            .map(from_error)
-            .collect();
-        found.extend(result.warnings.iter().map(|w| {
-            let e = from_error(w);
-            Issue::warning(&e.code, e.path, e.message)
-        }));
+        let mut found = findings(resource, &result);
 
         if let Some(id) = resource.get("id")
             && !id.as_str().is_some_and(is_valid_id)
