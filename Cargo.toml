@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.98"
 description = "Personal health vault: FHIR records as files on your own machine, versioned with Git"
 repository = "https://github.com/recodelabs/phv"
+license = "MIT"
 
 [lib]
 name = "phv"
