@@ -2565,7 +2565,7 @@ pub(crate) fn build_provenance(
 
 impl Phv {
     pub async fn source_add(&self, file_name: &str, bytes: &[u8]) -> Result<SourceReport, PhvError> {
-        let _lock = self.vault().lock()?;
+        let _lock = self.vault().lock_async().await?;
         let sha256 = sha256_hex(bytes);
         let id = document_id(&sha256);
         let document_reference = format!("DocumentReference/{id}");
@@ -2922,7 +2922,7 @@ Replace `src/check.rs` with:
 
 use crate::canon::canon_resource;
 use crate::error::{Issue, PhvError};
-use crate::refs::{collect_refs, local_target};
+use crate::refs::{ReferenceKind, collect_refs, reference_kind};
 use crate::write::{Phv, resource_ref};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -2972,7 +2972,12 @@ impl Phv {
         let known: HashMap<String, ()> = parsed.iter().map(|(_, r)| (resource_ref(r), ())).collect();
         for (location, resource) in &parsed {
             for reference in collect_refs(resource) {
-                if reference.starts_with("urn:") || (local_target(&reference).is_some() && !known.contains_key(&reference)) {
+                let broken = match reference_kind(&reference) {
+                    ReferenceKind::External => false,
+                    ReferenceKind::Local(..) => !known.contains_key(&reference),
+                    ReferenceKind::Unresolvable | ReferenceKind::Malformed => true,
+                };
+                if broken {
                     issues.push(Issue::error("PHV-REF", location, format!("{reference} does not resolve")));
                 }
             }

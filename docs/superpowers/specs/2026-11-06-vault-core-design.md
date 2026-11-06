@@ -136,7 +136,7 @@ AI skills and other callers submit FHIR JSON. phv treats it as untrusted.
 1. **Parse** one resource or a Bundle of type `transaction` or `collection`. Only `entry.resource` and `entry.fullUrl` are read from a Bundle. JSON with a repeated key in any object is rejected, because a parser would otherwise silently keep the last value. A Bundle with no entries, a Bundle inside a Bundle, and two entries sharing a local name are rejected too.
 2. **Assign IDs** and rewrite references to `urn:uuid:` full URLs and temporary IDs within the submission.
 3. **Validate** every resource, as described below. Any error rejects the whole submission and writes nothing.
-4. **Check references.** A relative `Type/id` reference must resolve in the submission or the vault. A `urn:` reference left over after rewriting can never resolve, so it is rejected. Other absolute URLs and `#contained` references are left alone. A vault holds at most one `Patient`.
+4. **Check references.** A relative `Type/id` reference must resolve in the submission or the vault. A `urn:` reference left over after rewriting can never resolve, so it is rejected, and so is anything else that is not a well-formed reference, such as `patient/abc` or `Patient/john_doe`. Absolute URLs and `#contained` references are left alone. A vault holds at most one `Patient`.
 5. **Add Provenance** when a source is given, as described below.
 6. **Write** under the lock. Each affected file is written to a temporary file in the same directory, flushed, then renamed over the original.
 
