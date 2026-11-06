@@ -140,7 +140,8 @@ There is one tile per measure, showing its newest record. Blood pressure, heart 
 
 - A lab report's results come from `DiagnosticReport.result`.
 - A record's source file and agent come from a `Provenance` that lists it as a target and has a `DocumentReference` entity. A document's "Records from it" count comes from the same data.
-- In the JSON view, a resolvable local reference is a link. A reference that does not resolve is shown as plain text.
+- Below a record's JSON, each reference is listed, as a link when it resolves locally and as plain text otherwise. This keeps the JSON itself fully escaped.
+- A record's page names the topic that shows it, if any.
 - A medicine's name comes from `medicationCodeableConcept`, then the referenced `Medication`, then the reference's `display`, then "Unnamed medicine".
 
 ## Documents
@@ -173,7 +174,7 @@ Record text and original files may hold anything, because they come from outside
   Cache-Control: no-store
   ```
 
-- **htmx settings:** `allowEval` is off, `selfRequestsOnly` is on and `includeIndicatorStyles` is off, so htmx works under this policy.
+- **htmx settings:** `allowEval` is off, `selfRequestsOnly` is on and `includeIndicatorStyles` is off, so htmx works under this policy. `historyCacheSize` is 0, so htmx keeps no copy of pages in browser storage.
 - **Original files:** the route accepts only 64 lowercase hex characters and looks for a regular file named `sources/<sha256>.<ext>`, refusing symlinks. A path stored in a record is never followed.
 - **File types:** only PDF, PNG, JPEG and plain text open in the browser. Anything else, including HTML and SVG, downloads as `application/octet-stream`. Originals also send `Cache-Control: no-store`, and all but PDF send `Content-Security-Policy: sandbox`, because that header can stop browsers' built-in PDF viewers. Implementation must confirm PDFs open in Chrome and Safari.
 
@@ -202,9 +203,10 @@ All test data is synthetic. `tests/fixtures/sample-vault/` is a small handwritte
 
 1. Merge the latest `vault-core` into this branch.
 2. Router, security headers, layout, All FHIR, sample vault and `examples/browser.rs`. This is useful alone, because every record can then be browsed.
-3. Overview and Vitals.
-4. Labs.
-5. Conditions, medicines, allergies and vaccines.
-6. Documents, reading category and date when present.
-7. The `phv source add` changes, once vault core Task 8 is merged.
-8. Mount the browser in `phv serve`, once vault core Task 12 is merged.
+3. Vitals.
+4. Documents, reading category and date when present. Labs links to original files, so this comes first.
+5. Labs.
+6. Conditions, medicines, allergies and vaccines.
+7. Overview, which gathers the topics above.
+8. The `phv source add` changes, once vault core Task 8 is merged.
+9. Mount the browser in `phv serve`, once vault core Task 12 is merged.
