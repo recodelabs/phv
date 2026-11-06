@@ -132,7 +132,7 @@ An ID is the first 32 hex characters of the SHA-256 of the canonical resource wi
 
 AI skills and other callers submit FHIR JSON. phv treats it as untrusted.
 
-1. **Parse** one resource or a Bundle of type `transaction` or `collection`. Only `entry.resource` and `entry.fullUrl` are read from a Bundle.
+1. **Parse** one resource or a Bundle of type `transaction` or `collection`. Only `entry.resource` and `entry.fullUrl` are read from a Bundle. JSON with a repeated key in any object is rejected, because a parser would otherwise silently keep the last value.
 2. **Assign IDs** and rewrite references to `urn:uuid:` full URLs and temporary IDs within the submission.
 3. **Validate** every resource, as described below. Any error rejects the whole submission and writes nothing.
 4. **Check references.** A relative `Type/id` reference must resolve in the submission or the vault. Absolute URLs and `#contained` references are left alone. A vault holds at most one `Patient`.

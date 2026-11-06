@@ -3059,6 +3059,15 @@ fn malformed_json_exits_2() {
 }
 
 #[test]
+fn duplicate_keys_exit_2_and_write_nothing() {
+    let (_d, v) = new_vault();
+    let input = r#"{"resourceType":"Patient","resourceType":"Observation","birthDate":"1980-01-01"}"#;
+    assert_eq!(phv_stdin(&v, &["add", "-"], input).status.code(), Some(2));
+    assert!(!v.join("records/Patient.ndjson").exists());
+    assert!(!v.join("records/Observation.ndjson").exists());
+}
+
+#[test]
 fn add_get_list_rm_work_end_to_end() {
     let (_d, v) = new_vault();
     let p = patient(&v);
@@ -3242,7 +3251,7 @@ fn read_json(file: &str) -> Result<Value, PhvError> {
     } else {
         text = std::fs::read_to_string(file).map_err(|e| PhvError::Usage(format!("cannot read {file}: {e}")))?;
     }
-    serde_json::from_str(&text).map_err(|e| PhvError::Usage(format!("{file} is not valid JSON: {e}")))
+    crate::canon::parse_json(&text).map_err(|e| PhvError::Usage(format!("{file}: {e}")))
 }
 
 fn split_target(target: &str) -> Result<(&str, &str), PhvError> {
@@ -3422,7 +3431,7 @@ pub async fn serve(_phv: Phv, _port: u16) -> Result<(), PhvError> {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test cli`
-Expected: 9 tests PASS. Clap exits with code 2 for `source_requires_agent`, which matches the spec.
+Expected: 10 tests PASS. Clap exits with code 2 for `source_requires_agent`, which matches the spec.
 
 - [ ] **Step 5: Commit**
 
@@ -3512,6 +3521,10 @@ async fn errors_are_operation_outcomes_with_the_right_status() {
     let (status, out) = send(app.clone(), "POST", "/resources", b"{not json".to_vec()).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(json(&out)["resourceType"], "OperationOutcome");
+
+    let duplicate = br#"{"resourceType":"Patient","resourceType":"Observation"}"#.to_vec();
+    let (status, _) = send(app.clone(), "POST", "/resources", duplicate).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 
     let mut invalid = lab(&patient, "1");
     invalid.as_object_mut().unwrap().remove("status");
@@ -3666,7 +3679,8 @@ impl IntoResponse for PhvError {
 }
 
 fn parse(body: &[u8]) -> Result<Value, PhvError> {
-    serde_json::from_slice(body).map_err(|e| PhvError::Usage(format!("body is not valid JSON: {e}")))
+    let text = std::str::from_utf8(body).map_err(|e| PhvError::Usage(format!("body is not UTF-8: {e}")))?;
+    crate::canon::parse_json(text).map_err(|e| PhvError::Usage(format!("body: {e}")))
 }
 
 async fn validate(State(phv): State<AppState>, body: Bytes) -> Result<Response, PhvError> {
