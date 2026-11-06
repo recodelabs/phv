@@ -244,6 +244,7 @@ phv serve [--port N]
 | `PUT /resources/{type}/{id}` | Same as `phv replace` | 200 |
 | `DELETE /resources/{type}/{id}` | Same as `phv rm` | 204 |
 | `GET /resources/{type}?where=EXPR` | List, as NDJSON | 200 |
+| `GET /ips` | Same as `phv ips`, added by the [IPS design](2026-11-06-ips-design.md) | 200 |
 | `POST /sources` | Same as `phv source add`, raw body, `filename` query parameter | 200 |
 
 Errors return a FHIR `OperationOutcome`: 400 for malformed input, 404 for a missing resource, 409 for reference conflicts and 422 for validation errors. Each issue carries the validator's code and the element path.
@@ -269,6 +270,7 @@ Each server serves one vault, so a session connected for one family member canno
 | `replace` | Same as `phv replace` |
 | `get`, `list` | Read records, with an optional FHIRPath filter. `list` returns at most `limit` records, 50 by default, and says when it stopped early |
 | `check` | Check the whole vault |
+| `ips` | Build an IPS document, added by the [IPS design](2026-11-06-ips-design.md) |
 
 There is no removal tool, so an AI session cannot delete records. `resource_json` is JSON text rather than parsed arguments, so duplicate keys are still rejected and decimals stay exact. Uploads are by absolute path to a regular file, because sending file contents as a tool argument would pass them through the model, and a device or FIFO could hang the server.
 
@@ -340,7 +342,7 @@ Each gets its own spec and plan.
 1. **Vault core:** this spec, including the first lab result skill.
 2. **Document ingestion (next):** more AI skills that map photos, visit notes and receipts to FHIR JSON and submit it through `phv add`, coding diagnoses with the ICD-10 that Termbox provides.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus limits on what an MCP session can read.
-4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
+4. **Summaries:** IPS documents and narratives. The IPS part is designed in [IPS generation](2026-11-06-ips-design.md). Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
 6. **Browser:** a local FHIR browser, designed in `2026-11-06-fhir-browser-design.md`, that queries the vault's files directly, with charts for activity and no web input. A warehouse is on hold, since querying the local files is enough. If one returns: `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
 
