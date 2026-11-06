@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ resource_type }}{% endblock %}
+{% block main %}
+<h1>{{ resource_type }}</h1>
+<p class="sub"><a href="/v/{{ chrome.vault }}/fhir">All FHIR</a> · {{ total }} records</p>
+<table>
+  <tr><th>Record</th><th>Date</th><th>ID</th></tr>
+  {% for row in &rows %}
+  <tr>
+    <td><a href="/v/{{ chrome.vault }}/fhir/{{ resource_type }}/{{ row.id_url }}">{% if row.label.is_empty() %}Unnamed{% else %}{{ row.label }}{% endif %}</a></td>
+    <td>{{ row.date }}</td>
+    <td class="muted">{{ row.id }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% if pages > 1 %}
+<p>
+  {% if page > 1 %}<a href="/v/{{ chrome.vault }}/fhir/{{ resource_type }}?page={{ page - 1 }}">Previous</a>{% endif %}
+  Page {{ page }} of {{ pages }}
+  {% if page < pages %}<a href="/v/{{ chrome.vault }}/fhir/{{ resource_type }}?page={{ page + 1 }}">Next</a>{% endif %}
+</p>
+{% endif %}
+{% endblock %}

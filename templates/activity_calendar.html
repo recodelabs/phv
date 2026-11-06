@@ -1,0 +1,19 @@
+{% if !calendar.is_empty() %}
+<h2>{{ calendar_heading }}</h2>
+<p class="heat-legend" hidden>
+  <span class="muted">Less</span>
+  <i class="heat-1"></i><i class="heat-2"></i><i class="heat-3"></i><i class="heat-4"></i>
+  <span class="muted">More</span>
+  <i class="heat-0"></i>
+  <span class="muted">No record. Click a day to open its month.</span>
+</p>
+<details class="table-view">
+  <summary>Table</summary>
+  <table data-chart="calendar">
+    <tr><th>Day</th></tr>
+    {% for d in &calendar %}
+    <tr data-x="{{ d.date }}" data-y="{{ d.value }}" data-title="{{ d.title }}"><td><a href="{{ path }}?{{ d.query }}">{{ d.title }}</a></td></tr>
+    {% endfor %}
+  </table>
+</details>
+{% endif %}

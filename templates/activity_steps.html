@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Steps{% endblock %}
+{% block scripts %}{% include "activity_scripts.html" %}{% endblock %}
+{% block main %}
+<h1>Activity</h1>
+<nav class="tabs" aria-label="Activity views">
+  <a href="{{ path }}{% if !tab_query.is_empty() %}?{{ tab_query }}{% endif %}" aria-current="page">Steps</a>
+  <a href="{{ path }}/workouts{% if !tab_query.is_empty() %}?{{ tab_query }}{% endif %}">Workouts</a>
+</nav>
+{% if !any_steps %}
+<p>No steps yet.</p>
+{% else %}
+<div class="filter-bar">
+  <form class="filters" method="get" action="{{ path }}">
+    {% include "activity_period_fields.html" %}
+    <button type="submit" class="apply">Apply</button>
+    {% if filters.any_filter %}<a class="clear" href="{{ path }}">Clear</a>{% endif %}
+  </form>
+  <div class="units" role="group" aria-label="Show steps by">
+    <span class="units-label">Show by</span>
+    {% for l in &filters.levels %}{% if l.enabled %}<a href="{{ path }}{% if !l.query.is_empty() %}?{{ l.query }}{% endif %}"{% if l.on %} aria-current="true"{% endif %}>{{ l.label }}</a>{% else %}<span class="off">{{ l.label }}</span>{% endif %}{% endfor %}
+  </div>
+</div>
+{% include "activity_period_line.html" %}
+{% if unusable > 0 %}
+<p class="notice">{{ unusable }} step records have no usable date or count, so they aren't included.</p>
+{% endif %}
+{% if duplicate_days > 0 %}
+<p class="notice">{{ duplicate_days }} days have more than one step record. The largest is used for each.</p>
+{% endif %}
+{% if has_steps %}
+<div class="tiles">
+  <div class="tile"><b>{{ summary.total }}</b><span>Total steps</span></div>
+  <div class="tile"><b>{{ summary.average }}</b><span>Average per recorded day</span></div>
+  <div class="tile"><b>{{ summary.days }}</b><span>Days recorded</span></div>
+</div>
+{% if can_zoom %}<p class="sub">Click a bar to zoom in.</p>{% endif %}
+<details class="table-view" open>
+  <summary>Table</summary>
+  <table data-chart="steps" data-unit="steps" data-axis="Steps">
+    <tr><th>{{ level }}</th><th class="num">Steps</th></tr>
+    {% let rows = &steps %}
+    {% include "bucket_rows.html" %}
+  </table>
+</details>
+{% include "activity_calendar.html" %}
+{% else %}
+<p>No steps recorded in {{ title }}.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

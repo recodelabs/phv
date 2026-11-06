@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block main %}
+<h1>{{ chrome.person }}</h1>
+<p class="sub">{% if let Some(born) = &view.birth_date %}Born {{ born }} · {% endif %}{{ record_count }} records · {{ document_count }} documents</p>
+{% if view.measures.is_empty() && view.latest_steps.is_none() %}
+<p>No vitals yet.</p>
+{% else %}
+<div class="tiles">
+  {% for m in &view.measures %}
+  <a class="tile-link" href="/v/{{ chrome.vault }}/vitals/{{ m.latest.key_url }}"><div class="tile">
+    <b>{% for line in &m.latest.lines %}{{ line }}{% if !loop.last %}<br>{% endif %}{% else %}See FHIR{% endfor %}</b>
+    <span>{{ m.latest.name }} · {{ m.latest.date }}</span>
+  </div></a>
+  {% endfor %}
+  {% if let Some(steps) = &view.latest_steps %}
+  <a class="tile-link" href="/v/{{ chrome.vault }}/activity"><div class="tile">
+    <b>{{ steps.steps }}</b>
+    <span>Steps · {{ steps.date }}</span>
+  </div></a>
+  {% endif %}
+</div>
+{% endif %}
+<h2>Latest lab report</h2>
+{% if let Some(report) = &view.latest_report %}
+<p><a href="/v/{{ chrome.vault }}/labs/reports/{{ report.id_url }}">{{ report.name }}</a> <span class="muted">· {{ report.date }} · {{ report.result_count }} results</span></p>
+{% else %}
+<p>No labs yet.</p>
+{% endif %}
+<h2>Active now</h2>
+<table>
+  <tr><th>Conditions</th><td>{% for row in &view.conditions %}<div>{{ row.name }}{% if row.status == "Status not recorded" %} <span class="muted">Status not recorded</span>{% endif %}</div>{% else %}<span class="muted">None recorded</span>{% endfor %}</td></tr>
+  <tr><th>Medicines</th><td>{% for row in &view.medicines %}<div>{{ row.name }}{% if row.status == "Status not recorded" %} <span class="muted">Status not recorded</span>{% endif %}</div>{% else %}<span class="muted">None recorded</span>{% endfor %}</td></tr>
+  <tr><th>Allergies</th><td>{% for row in &view.allergies %}<div>{{ row.name }}{% if row.status == "Status not recorded" %} <span class="muted">Status not recorded</span>{% endif %}</div>{% else %}<span class="muted">None recorded</span>{% endfor %}</td></tr>
+</table>
+{% endblock %}

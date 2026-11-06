@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}All FHIR{% endblock %}
+{% block main %}
+<h1>All FHIR</h1>
+<p class="sub">Every record in this vault, by FHIR resource type.</p>
+{% if types.is_empty() %}
+<p>No records yet.</p>
+{% else %}
+<table>
+  <tr><th>Type</th><th>Records</th></tr>
+  {% for t in &types %}
+  <tr><td><a href="/v/{{ chrome.vault }}/fhir/{{ t.name }}">{{ t.name }}</a></td><td>{{ t.count }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}
