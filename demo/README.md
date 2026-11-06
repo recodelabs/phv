@@ -28,6 +28,12 @@ phv --vault maria check
 
 Skip the person's details in `phv setup`, because the Bundle brings its own `Patient` and a vault holds only one.
 
-phv can't turn the claim files into records yet, so they are stored as original documents. The lab draft has its own placeholder `Patient`, so try it in a separate vault.
+The loop above stores the claim files as original documents. To turn them into claim records as well:
+
+```bash
+phv --vault maria import x12-835 demo/claims-835/*.edi
+```
+
+The lab draft has its own placeholder `Patient`, so try it in a separate vault.
 
 `tests/demo.rs` checks that this data keeps importing cleanly.

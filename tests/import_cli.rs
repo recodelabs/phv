@@ -123,3 +123,51 @@ async fn an_older_export_is_held_and_reported_without_failing() {
         stored
     );
 }
+
+fn phv_import_835(vault: &Path, files: &[&Path], flags: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_phv"))
+        .arg("--vault")
+        .arg(vault)
+        .args(["import", "x12-835"])
+        .args(files)
+        .args(flags)
+        .env_remove("PHV_VAULT")
+        .output()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn x12_835_imports_each_file_and_says_which_one_failed() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = dir.path().join("vault");
+    let phv = Phv::new(Vault::init(&vault).unwrap()).await.unwrap();
+    phv.add(
+        &json!({"resourceType":"Patient","name":[{"family":"Rodriguez","given":["Maria"]}]}),
+        &AddOptions::default(),
+    )
+    .await
+    .unwrap();
+    let good = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("demo/claims-835/835_SYN00001_20241101_0001.edi");
+    let bad = dir.path().join("bad.edi");
+    std::fs::write(&bad, "not an edi file").unwrap();
+
+    let dry = phv_import_835(&vault, &[&good], &["--dry-run"]);
+    assert!(dry.status.success(), "{dry:?}");
+    assert!(stdout(&dry).contains("would add 1 claims"), "{dry:?}");
+    assert!(!vault.join("records/ExplanationOfBenefit.ndjson").exists());
+
+    let both = phv_import_835(&vault, &[&bad, &good], &[]);
+    assert_eq!(both.status.code(), Some(1), "{both:?}");
+    let text = stdout(&both);
+    assert!(text.contains("bad.edi: not imported"), "{text}");
+    assert!(text.contains("added 1 claims"), "{text}");
+    assert!(text.contains("test data"), "{text}");
+
+    let again = phv_import_835(&vault, &[&good], &[]);
+    assert!(again.status.success(), "{again:?}");
+    assert!(
+        stdout(&again).contains("added 0 claims, 1 already stored"),
+        "{again:?}"
+    );
+}

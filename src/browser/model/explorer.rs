@@ -4,7 +4,7 @@ use super::activity;
 use super::clinical::verified_in_error;
 use super::labs::{is_lab_observation, is_lab_report};
 use super::observation::{clinical_date, is_entered_in_error};
-use super::value::{concept_name, encode_segment, friendly_date, id_of};
+use super::value::{concept_name, encode_segment, friendly_date, id_of, number_text};
 use super::vitals::is_vital;
 use crate::refs::{collect_refs, local_target};
 use serde_json::Value;
@@ -37,6 +37,13 @@ pub fn label_of(resource: &Value) -> String {
     if let Some(title) = resource["content"][0]["attachment"]["title"].as_str() {
         return title.to_string();
     }
+    if resource["resourceType"] == "ExplanationOfBenefit" {
+        return claim_label(resource);
+    }
+    // Organizations and some other types have one name rather than a list.
+    if let Some(name) = resource["name"].as_str() {
+        return name.to_string();
+    }
     for key in ["code", "vaccineCode", "medicationCodeableConcept", "type"] {
         if let Some(name) = concept_name(&resource[key]) {
             return name;
@@ -46,6 +53,31 @@ pub fn label_of(resource: &Value) -> String {
         return name;
     }
     String::new()
+}
+
+/// Who billed, and how the charge was split.
+fn claim_label(claim: &Value) -> String {
+    let total = |code: &str| {
+        claim["total"]
+            .as_array()?
+            .iter()
+            .find(|t| t["category"]["coding"][0]["code"] == code)
+            .and_then(|t| number_text(&t["amount"]["value"]))
+    };
+    let mut parts: Vec<String> = claim["provider"]["display"]
+        .as_str()
+        .map(str::to_string)
+        .into_iter()
+        .collect();
+    for (code, text) in [
+        ("benefit", "plan paid"),
+        ("memberliability", "patient owes"),
+    ] {
+        if let Some(amount) = total(code) {
+            parts.push(format!("{text} ${amount}"));
+        }
+    }
+    parts.join(" · ")
 }
 
 /// `name[0].text`, otherwise given names followed by the family name.
@@ -69,6 +101,11 @@ pub fn record_row(resource: &Value) -> RecordRow {
     let date = clinical_date(resource)
         .or_else(|| resource["date"].as_str().map(str::to_string))
         .or_else(|| resource["recorded"].as_str().map(str::to_string))
+        .or_else(|| {
+            resource["billablePeriod"]["start"]
+                .as_str()
+                .map(str::to_string)
+        })
         .map(|d| friendly_date(&d))
         .unwrap_or_default();
     RecordRow {
