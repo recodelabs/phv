@@ -15,6 +15,7 @@ name = "phv"
 path = "src/main.rs"
 
 [dependencies]
+askama = "0.16"
 axum = "0.8"
 clap = { version = "4", features = ["derive"] }
 humantime = "2"
