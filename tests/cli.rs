@@ -198,3 +198,118 @@ fn a_bad_target_exits_2() {
     let (_d, v) = new_vault();
     assert_eq!(phv(&v, &["get", "no-slash"]).status.code(), Some(2));
 }
+
+fn add_many_observations(vault: &Path, count: usize) {
+    let p = patient(vault);
+    let entries: Vec<Value> = (0..count)
+        .map(|i| {
+            serde_json::json!({"resource": {
+                "resourceType": "Observation",
+                "status": "final",
+                "code": {"text": "x"},
+                "subject": {"reference": p},
+                "valueQuantity": {"value": i},
+            }})
+        })
+        .collect();
+    let bundle =
+        serde_json::json!({"resourceType": "Bundle", "type": "collection", "entry": entries});
+    let o = phv_stdin(vault, &["add", "-"], &bundle.to_string());
+    assert!(o.status.success(), "{o:?}");
+}
+
+#[test]
+fn a_closed_pipe_ends_list_quietly() {
+    let (_d, v) = new_vault();
+    add_many_observations(&v, 3000);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_phv"))
+        .args(["--vault", v.to_str().unwrap(), "list", "Observation"])
+        .env_remove("PHV_VAULT")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // The reader goes away at once, like `| head -1` after it has what it wants.
+    drop(child.stdout.take().unwrap());
+    let o = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert!(!stderr.contains("Broken pipe"), "{stderr}");
+    assert_ne!(o.status.code(), Some(101), "{o:?}");
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+}
+
+#[test]
+fn invalid_utf8_on_stdin_exits_2() {
+    let (_d, v) = new_vault();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_phv"))
+        .args(["--vault", v.to_str().unwrap(), "add", "-"])
+        .env_remove("PHV_VAULT")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let _ = child.stdin.take().unwrap().write_all(&[0xff]);
+    assert_eq!(child.wait_with_output().unwrap().status.code(), Some(2));
+}
+
+#[test]
+fn json_reports_a_failed_add_on_stdout() {
+    let (_d, v) = new_vault();
+    let o = phv_stdin(
+        &v,
+        &["add", "-", "--json"],
+        r#"{"resourceType":"Observation","code":{"text":"x"}}"#,
+    );
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    let body: Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(body["error"], "validation failed");
+    let issues = body["issues"].as_array().unwrap();
+    assert!(!issues.is_empty());
+    assert!(
+        issues
+            .iter()
+            .any(|i| i["message"].to_string().contains("status")),
+        "{body}"
+    );
+    assert_eq!(issues[0]["severity"], "error");
+}
+
+#[test]
+fn json_reports_not_found_on_stdout() {
+    let (_d, v) = new_vault();
+    let o = phv(&v, &["get", "Observation/nope", "--json"]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    let body: Value = serde_json::from_str(&out(&o)).unwrap();
+    assert!(
+        body["error"].as_str().unwrap().contains("not found"),
+        "{body}"
+    );
+    assert_eq!(body["issues"], serde_json::json!([]));
+}
+
+#[test]
+fn without_json_errors_stay_on_stderr() {
+    let (_d, v) = new_vault();
+    let o = phv(&v, &["get", "Observation/nope"]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert_eq!(out(&o), "");
+    assert!(String::from_utf8_lossy(&o.stderr).starts_with("phv: not found"));
+}
+
+#[test]
+fn recorded_at_requires_source() {
+    let (_d, v) = new_vault();
+    let o = phv_stdin(
+        &v,
+        &["add", "-", "--recorded-at", "2026-01-01T00:00:00Z"],
+        r#"{"resourceType":"Patient","birthDate":"1980-01-01"}"#,
+    );
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(
+        String::from_utf8_lossy(&o.stderr).contains("--source"),
+        "{o:?}"
+    );
+    assert!(!v.join("records/Patient.ndjson").exists());
+}

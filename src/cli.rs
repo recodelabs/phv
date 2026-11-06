@@ -6,7 +6,7 @@ use crate::write::{AddOptions, Phv, WriteReport};
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::{
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
 };
@@ -50,7 +50,7 @@ pub enum Command {
         #[arg(long, requires = "source")]
         agent: Option<String>,
         /// Provenance time. Defaults to now in UTC.
-        #[arg(long)]
+        #[arg(long, requires = "source")]
         recorded_at: Option<String>,
         #[arg(long)]
         dry_run: bool,
@@ -122,7 +122,9 @@ fn warn_if_no_history(phv: &Phv) {
 fn read_json(file: &str) -> Result<Value, PhvError> {
     let mut text = String::new();
     if file == "-" {
-        std::io::stdin().read_to_string(&mut text)?;
+        std::io::stdin()
+            .read_to_string(&mut text)
+            .map_err(|e| PhvError::Usage(format!("cannot read stdin: {e}")))?;
     } else {
         text = std::fs::read_to_string(file)
             .map_err(|e| PhvError::Usage(format!("cannot read {file}: {e}")))?;
@@ -140,11 +142,18 @@ fn now() -> String {
     humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string()
 }
 
-fn print_json<T: serde::Serialize>(value: &T) {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(value).expect("reports serialize")
-    );
+/// Writes one line to stdout. A closed pipe, as in `phv list X | head -1`, ends the process
+/// quietly with status 0. Other write errors are returned.
+fn out_line(line: impl std::fmt::Display) -> Result<(), PhvError> {
+    match writeln!(std::io::stdout().lock(), "{line}") {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(0),
+        other => Ok(other?),
+    }
+}
+
+/// Prints a value as pretty JSON. Also used by `main` for error output.
+pub fn print_json<T: serde::Serialize>(value: &T) -> Result<(), PhvError> {
+    out_line(serde_json::to_string_pretty(value).expect("reports serialize"))
 }
 
 fn print_issues(issues: &[Issue]) {
@@ -153,22 +162,23 @@ fn print_issues(issues: &[Issue]) {
     }
 }
 
-fn print_write(report: &WriteReport, json: bool) {
+fn print_write(report: &WriteReport, json: bool) -> Result<(), PhvError> {
     if json {
-        print_json(report);
-        return;
+        print_json(report)?;
+        return Ok(());
     }
     let prefix = if report.dry_run { "would " } else { "" };
     for r in &report.created {
-        println!("{prefix}create {r}");
+        out_line(format!("{prefix}create {r}"))?;
     }
     for r in &report.updated {
-        println!("{prefix}update {r}");
+        out_line(format!("{prefix}update {r}"))?;
     }
     for r in &report.unchanged {
-        println!("unchanged {r}");
+        out_line(format!("unchanged {r}"))?;
     }
     print_issues(&report.warnings);
+    Ok(())
 }
 
 /// Runs a command. Findings that mean failure are returned as errors or exit code 1.
@@ -181,7 +191,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         Command::Vaults => {
             let registry = crate::setup::load_registry(&home_dir()?)?;
             if cli.json {
-                print_json(&registry);
+                print_json(&registry)?;
             } else if registry.vaults.is_empty() {
                 println!("no vaults yet: run phv setup");
             } else {
@@ -210,7 +220,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
     if let Command::Init { path } = &cli.command {
         let vault = Vault::init(path)?;
         if cli.json {
-            print_json(&serde_json::json!({"vault": vault.root()}));
+            print_json(&serde_json::json!({"vault": vault.root()}))?;
         } else {
             println!("created vault at {}", vault.root().display());
             println!("keep it private. Git is optional: phv setup can set it up for you");
@@ -235,7 +245,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             let issues = phv.validate_submission(&read_json(&file)?).await?;
             let failed = issues.iter().any(Issue::is_error);
             if cli.json {
-                print_json(&issues);
+                print_json(&issues)?;
             } else {
                 print_issues(&issues);
                 if !failed {
@@ -263,7 +273,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
                 recorded_at,
                 dry_run,
             };
-            print_write(&phv.add(&input, &options).await?, cli.json);
+            print_write(&phv.add(&input, &options).await?, cli.json)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Replace {
@@ -275,7 +285,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             let report = phv
                 .replace(resource_type, id, &read_json(&file)?, dry_run)
                 .await?;
-            print_write(&report, cli.json);
+            print_write(&report, cli.json)?;
             if !dry_run && !report.updated.is_empty() {
                 warn_if_no_history(&phv);
             }
@@ -286,7 +296,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             phv.remove(resource_type, id).await?;
             warn_if_no_history(&phv);
             if cli.json {
-                print_json(&serde_json::json!({"removed": target}));
+                print_json(&serde_json::json!({"removed": target}))?;
             } else {
                 println!(
                     "removed {target}. In a vault with Git, it stays in history until you rewrite that history"
@@ -296,7 +306,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         }
         Command::Get { target } => {
             let (resource_type, id) = split_target(&target)?;
-            println!("{}", phv.get(resource_type, id)?);
+            out_line(phv.get(resource_type, id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::List {
@@ -305,7 +315,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         } => {
             let result = phv.search(&resource_type, filter.as_deref()).await?;
             for line in &result.lines {
-                println!("{line}");
+                out_line(line)?;
             }
             if let Some(warning) = result.warning() {
                 eprintln!("warning: {warning}");
@@ -322,7 +332,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
                 .to_string();
             let report = phv.source_add(&name, &bytes).await?;
             if cli.json {
-                print_json(&report);
+                print_json(&report)?;
             } else {
                 if report.restored {
                     println!("restored the stored file, which was missing or damaged");
@@ -341,7 +351,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             let issues = phv.check().await?;
             let failed = issues.iter().any(Issue::is_error);
             if cli.json {
-                print_json(&issues);
+                print_json(&issues)?;
             } else {
                 print_issues(&issues);
                 if !failed {
