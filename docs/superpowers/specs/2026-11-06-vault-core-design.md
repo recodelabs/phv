@@ -196,6 +196,10 @@ Reads load the NDJSON file for a resource type from the working tree. There is n
 
 Filtering uses FHIRPath expressions from `--where` or the `where` query parameter, evaluated against each resource and treated as true if the result is `true`.
 
+A health query must not quietly look empty. A record can give no true or false answer because of a typo in an element name, a non-boolean expression, an element the record lacks, or dates of different precision. When that happens, the record is left out and phv warns how many records gave no answer: on stderr in the CLI, in an `x-phv-warning` header in the API, and as a second content item in MCP. An unknown resource type is an error rather than an empty list. An evaluation error names the record that caused it.
+
+`octofhir-fhirpath` 0.5.8 returns no answer for `>=` and `<=` against a date literal, such as `effectiveDateTime >= @2026-03-14`, while `>`, `<` and `=` work. `effectiveDateTime.toDate() >= @2026-03-14` works and also handles date-times, so the docs use that form. A test pins the bug so an upstream fix is noticed.
+
 Dashboard and analytics queries belong to the warehouse in sub-project 6. For a vault with Git, it is built from the last commit so unreviewed changes stay out.
 
 ## Interfaces
