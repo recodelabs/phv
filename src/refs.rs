@@ -46,3 +46,28 @@ pub fn local_target(reference: &str) -> Option<(&str, &str)> {
         && resource_type.chars().all(|c| c.is_ascii_alphabetic());
     (type_ok && is_valid_id(id)).then_some((resource_type, id))
 }
+
+/// What a `reference` string points at, as far as this vault is concerned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReferenceKind<'a> {
+    /// A fragment (`#id`) or an absolute URL. phv does not check these.
+    External,
+    /// A well-formed relative `Type/id`.
+    Local(&'a str, &'a str),
+    /// A `urn:` reference. It can only be resolved inside a submission.
+    Unresolvable,
+    /// Anything else, such as `patient/abc`, `Patient/john_doe` or `Patient/abc/_history/1`.
+    Malformed,
+}
+
+pub fn reference_kind(reference: &str) -> ReferenceKind<'_> {
+    if reference.starts_with('#') || reference.contains("://") {
+        ReferenceKind::External
+    } else if reference.starts_with("urn:") {
+        ReferenceKind::Unresolvable
+    } else if let Some((resource_type, id)) = local_target(reference) {
+        ReferenceKind::Local(resource_type, id)
+    } else {
+        ReferenceKind::Malformed
+    }
+}

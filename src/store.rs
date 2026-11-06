@@ -401,8 +401,20 @@ impl Vault {
         Ok(())
     }
 
-    /// Applies changes file by file. Files whose content would not change are not written.
-    pub fn apply(&self, changes: &[Change]) -> Result<(), PhvError> {
+    /// Holds the lock like `lock`, but waits on a blocking thread so the async runtime keeps running.
+    pub async fn lock_async(&self) -> Result<File, PhvError> {
+        let vault = self.clone();
+        tokio::task::spawn_blocking(move || vault.lock())
+            .await
+            .map_err(|e| PhvError::Io(std::io::Error::other(e)))?
+    }
+
+    /// Checks that `apply` would accept these changes, without writing anything.
+    pub fn check_changes(&self, changes: &[Change]) -> Result<(), PhvError> {
+        self.plan(changes).map(|_| ())
+    }
+
+    fn plan(&self, changes: &[Change]) -> Result<Vec<(PathBuf, Vec<String>)>, PhvError> {
         // The caller must hand over consistent changes, so a mismatch is a programming error.
         for change in changes {
             validate_change(change)?;
@@ -427,6 +439,12 @@ impl Vault {
                 pending.push((self.file_for(resource_type)?, lines));
             }
         }
+        Ok(pending)
+    }
+
+    /// Applies changes file by file. Files whose content would not change are not written.
+    pub fn apply(&self, changes: &[Change]) -> Result<(), PhvError> {
+        let pending = self.plan(changes)?;
         for (path, lines) in pending {
             if lines.is_empty() {
                 fs::remove_file(&path)?;
