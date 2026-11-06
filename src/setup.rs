@@ -48,11 +48,81 @@ fn ask(question: &str) -> Result<String, PhvError> {
     Ok(line.trim().to_string())
 }
 
+/// Asks a yes or no question. Anything but a clear answer is asked again.
+fn ask_yes_no(question: &str, default_yes: bool) -> Result<bool, PhvError> {
+    loop {
+        let answer = ask(question)?;
+        if answer.is_empty() {
+            return Ok(default_yes);
+        }
+        if answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes") {
+            return Ok(true);
+        }
+        if answer.eq_ignore_ascii_case("n") || answer.eq_ignore_ascii_case("no") {
+            return Ok(false);
+        }
+        println!("Please answer y or n.");
+    }
+}
+
 fn expand_home(answer: &str, home: &Path) -> PathBuf {
+    if answer == "~" {
+        return home.to_path_buf();
+    }
     match answer.strip_prefix("~/") {
         Some(rest) => home.join(rest),
         None => PathBuf::from(answer),
     }
+}
+
+/// Accepts a GitHub repo name, or `owner/name`. A leading `-` is refused so it can never be read as a flag.
+fn is_valid_repo_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
+}
+
+/// Opens an unregistered vault that is already at `root`, or creates one in a new or empty folder.
+/// Nothing is created or registered if the folder holds other files.
+fn open_or_create(root: &Path) -> Result<Vault, PhvError> {
+    let root = std::path::absolute(root)?;
+    if root.join("phv.toml").exists() {
+        println!(
+            "{} is already a vault that was not registered. Registering it.",
+            root.display()
+        );
+        return Vault::open(&root);
+    }
+    match std::fs::read_dir(&root) {
+        Ok(mut entries) => {
+            if entries.next().is_some() {
+                return Err(PhvError::Usage(format!(
+                    "{} already has files in it. Choose a new or empty folder, so nothing unrelated is saved with your health records.",
+                    root.display()
+                )));
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => {
+            return Err(PhvError::Usage(format!(
+                "cannot use {} for a vault: {e}",
+                root.display()
+            )));
+        }
+    }
+    Vault::init(&root).map_err(|e| match e {
+        PhvError::Usage(message) => PhvError::Usage(format!(
+            "cannot create a vault at {}: {message}",
+            root.display()
+        )),
+        PhvError::Io(e) => PhvError::Io(std::io::Error::new(
+            e.kind(),
+            format!("cannot create a vault at {}: {e}", root.display()),
+        )),
+        other => other,
+    })
 }
 
 /// True if the command runs and exits successfully, with its output hidden.
@@ -70,7 +140,12 @@ fn succeeds(program: &str, args: &[&str], dir: Option<&Path>) -> bool {
 }
 
 async fn add_patient(root: &Path) -> Result<(), PhvError> {
-    let phv = Phv::new(Vault::open(root)?).await?;
+    let vault = Vault::open(root)?;
+    if !vault.lines("Patient")?.is_empty() {
+        println!("\nThis vault already has its Patient, so there is nothing to add.");
+        return Ok(());
+    }
+    let phv = Phv::new(vault).await?;
     println!("\nNow the person's details. Press Enter to skip any of them.");
     let family = ask("Family name:")?;
     let given = ask("Given name:")?;
@@ -104,17 +179,23 @@ async fn add_patient(root: &Path) -> Result<(), PhvError> {
                 return Ok(());
             }
             Err(PhvError::Invalid(issues)) => {
-                println!(
-                    "That was not accepted: {}\nTry the birth date again, or press Enter to leave it out.",
-                    issues.first().map_or_else(String::new, ToString::to_string)
-                );
+                if issues.iter().any(|i| i.path.contains("birthDate")) {
+                    println!(
+                        "That doesn't look like a date. Use year-month-day, for example 1980-01-31, or press Enter to leave it out."
+                    );
+                } else {
+                    println!(
+                        "That was not accepted: {}\nTry the birth date again, or press Enter to leave it out.",
+                        issues.first().map_or_else(String::new, ToString::to_string)
+                    );
+                }
             }
             Err(other) => return Err(other),
         }
     }
 }
 
-/// Returns true if the vault now uses Git.
+/// Returns true only if the vault now has a Git repo with its first commit.
 fn setup_git(root: &Path) -> Result<bool, PhvError> {
     println!("\nGit keeps a history of every change, so you can review and undo them.");
     if !succeeds("git", &["--version"], None) {
@@ -123,22 +204,27 @@ fn setup_git(root: &Path) -> Result<bool, PhvError> {
         );
         return Ok(false);
     }
-    let answer = ask("Use Git for this vault? [Y/n]")?;
-    if answer.eq_ignore_ascii_case("n") || answer.eq_ignore_ascii_case("no") {
+    if !ask_yes_no("Use Git for this vault? [Y/n]", true)? {
         println!("No Git. Changes will be final, with no history or undo.");
         return Ok(false);
     }
-    let ok = succeeds("git", &["init", "-q", "-b", "main"], Some(root))
-        && succeeds("git", &["add", "-A"], Some(root))
+    // Stage vault files by name, so nothing else in the folder can be committed or pushed.
+    let committed = succeeds("git", &["init", "-q", "-b", "main"], Some(root))
+        && succeeds(
+            "git",
+            &["add", "--", "phv.toml", ".gitignore", "records", "sources"],
+            Some(root),
+        )
         && succeeds("git", &["commit", "-qm", "Create health vault"], Some(root));
-    if ok {
+    if committed {
         println!("Created a Git repo with a first commit.");
     } else {
         println!(
-            "Git could not make the first commit. Set your name and email with git config, then commit in the vault."
+            "Git could not make the first commit, most often because it does not know your name yet. To fix it, run:\n  git config --global user.name \"Your Name\"\n  git config --global user.email \"you@example.com\"\nThen, in {}, run:\n  git add -- phv.toml .gitignore records sources\n  git commit -m \"Create health vault\"\nGitHub is not offered until the vault has a commit.",
+            root.display()
         );
     }
-    Ok(root.join(".git").exists())
+    Ok(committed)
 }
 
 fn setup_github(root: &Path, name: &str) -> Result<(), PhvError> {
@@ -163,17 +249,22 @@ fn setup_github(root: &Path, name: &str) -> Result<(), PhvError> {
         return Ok(());
     }
     println!("\n{GITHUB_WARNING}");
-    let answer = ask("Create a private GitHub repo for this vault? [y/N]")?;
-    if !(answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes")) {
+    if !ask_yes_no("Create a private GitHub repo for this vault? [y/N]", false)? {
         println!("No GitHub repo. This vault stays on this machine.");
         return Ok(());
     }
     let default_repo = format!("phv-vault-{name}");
-    let answer = ask(&format!("Repo name [{default_repo}]:"))?;
-    let repo = if answer.is_empty() {
-        default_repo
-    } else {
-        answer
+    let repo = loop {
+        let answer = ask(&format!("Repo name [{default_repo}]:"))?;
+        if answer.is_empty() {
+            break default_repo;
+        }
+        if is_valid_repo_name(&answer) {
+            break answer;
+        }
+        println!(
+            "A repo name uses letters, numbers, . _ - and /, and cannot start with -. Try again."
+        );
     };
     let source = format!("--source={}", root.display());
     // Always private. phv has no option to create a public repo.
@@ -193,7 +284,8 @@ fn setup_github(root: &Path, name: &str) -> Result<(), PhvError> {
         println!("Created private repo {repo} and pushed this vault.");
     } else {
         println!(
-            "GitHub step failed. Your local vault is fine. To retry, run: gh repo create {repo} --private --source=. --remote=origin --push"
+            "GitHub step failed. Your local vault is fine. To retry, run this in {}: gh repo create {repo} --private --source=. --remote=origin --push",
+            root.display()
         );
     }
     Ok(())
@@ -208,6 +300,12 @@ pub async fn run(home: &Path) -> Result<(), PhvError> {
     let name = ask("Short name for this vault, in lowercase letters and numbers, such as maya:")?;
     let default_path = home.join("health-vaults").join(&name);
     // Check the name before asking anything else or creating a folder from it.
+    if let Some(existing) = registry.vaults.get(&name) {
+        return Err(PhvError::Usage(format!(
+            "a vault named {name} already exists at {}. To add the person's details, run phv --vault {name} add. To use Git, run git init in that folder.",
+            existing.display()
+        )));
+    }
     let mut updated = registry.clone();
     updated.register(&name, &default_path)?;
 
@@ -221,10 +319,11 @@ pub async fn run(home: &Path) -> Result<(), PhvError> {
         expand_home(&answer, home)
     };
 
-    let vault = Vault::init(&root)?;
+    // Check the folder before creating or registering anything.
+    let vault = open_or_create(&root)?;
     registry.register(&name, vault.root())?;
     save_registry(home, &registry)?;
-    println!("Created {}.", vault.root().display());
+    println!("Vault {name} is at {}.", vault.root().display());
 
     add_patient(vault.root()).await?;
 
