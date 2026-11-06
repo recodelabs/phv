@@ -3162,6 +3162,22 @@ fn check_exits_0_when_healthy_and_1_with_problems() {
 }
 
 #[test]
+fn a_filter_that_gets_no_answers_warns_on_stderr_only() {
+    let (_d, v) = new_vault();
+    patient(&v);
+    let o = phv(&v, &["list", "Patient", "--where", "brithDate = @1980-01-01"]);
+    assert!(o.status.success(), "{o:?}");
+    assert_eq!(out(&o), "");
+    assert!(String::from_utf8_lossy(&o.stderr).contains("no true or false answer"), "{o:?}");
+}
+
+#[test]
+fn import_still_works_alongside_the_other_commands() {
+    let o = Command::new(env!("CARGO_BIN_EXE_phv")).args(["import", "--help"]).output().unwrap();
+    assert!(o.status.success(), "{o:?}");
+}
+
+#[test]
 fn a_bad_target_exits_2() {
     let (_d, v) = new_vault();
     assert_eq!(phv(&v, &["get", "no-slash"]).status.code(), Some(2));
@@ -3250,6 +3266,11 @@ pub enum Command {
     Serve {
         #[arg(long, default_value_t = 8747)]
         port: u16,
+    },
+    /// Import an export from another system.
+    Import {
+        #[command(subcommand)]
+        command: crate::import::cli::ImportCommand,
     },
 }
 
@@ -3375,8 +3396,12 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             Ok(ExitCode::SUCCESS)
         }
         Command::List { resource_type, filter } => {
-            for line in phv.list(&resource_type, filter.as_deref()).await? {
+            let result = phv.search(&resource_type, filter.as_deref()).await?;
+            for line in &result.lines {
                 println!("{line}");
+            }
+            if let Some(warning) = result.warning() {
+                eprintln!("warning: {warning}");
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -3440,6 +3465,8 @@ async fn main() -> ExitCode {
 }
 ```
 
+`phv import` already exists in `src/main.rs` and `src/import/cli.rs`, merged from separate importer work. Keep it working: read the current `src/main.rs` before replacing it, and in `run`, before the vault is opened, return `crate::import::cli::run(command, cli.vault.as_deref(), cli.json).await` for `Command::Import`. Add `Command::Import { .. }` to the `unreachable!` arm. Make `vault_path` in `src/cli.rs` `pub(crate)`, and have `open_vault` in `src/import/cli.rs` call it, so there is one place that finds the vault. If `tests/import_cli.rs` checks stderr formatting, keep the format it expects.
+
 `Serve` needs `src/api.rs`, which Task 12 writes. Add `pub mod api;` to `src/lib.rs` and create this stub for now:
 
 ```rust
@@ -3453,8 +3480,8 @@ pub async fn serve(_phv: Phv, _port: u16) -> Result<(), PhvError> {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cargo test --test cli`
-Expected: 10 tests PASS. Clap exits with code 2 for `source_requires_agent`, which matches the spec.
+Run: `cargo test --test cli --test import_cli`
+Expected: 12 tests PASS in `cli`, and every `import_cli` test still passes. Clap exits with code 2 for `source_requires_agent`, which matches the spec.
 
 - [ ] **Step 5: Commit**
 
@@ -3558,6 +3585,19 @@ async fn errors_are_operation_outcomes_with_the_right_status() {
     let broken = serde_json::to_vec(&lab("Patient/none", "1")).unwrap();
     let (status, _) = send(app, "POST", "/resources", broken).await;
     assert_eq!(status, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn a_filter_with_no_answers_warns_in_a_header() {
+    let (_d, app, _patient) = setup().await;
+    let request = Request::builder()
+        .uri("/resources/Patient?where=brithDate%20%3D%20%401980-01-01")
+        .header("host", "127.0.0.1:8747")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers().get("x-phv-warning").is_some());
 }
 
 #[tokio::test]
@@ -3745,12 +3785,18 @@ struct ListQuery {
 }
 
 async fn list(State(phv): State<AppState>, Path(resource_type): Path<String>, Query(q): Query<ListQuery>) -> Result<Response, PhvError> {
-    let lines = phv.list(&resource_type, q.filter.as_deref()).await?;
-    let mut text = lines.join("\n");
+    let result = phv.search(&resource_type, q.filter.as_deref()).await?;
+    let mut text = result.lines.join("\n");
     if !text.is_empty() {
         text.push('\n');
     }
-    Ok(ndjson(text))
+    let mut response = ndjson(text);
+    if let Some(warning) = result.warning() {
+        if let Ok(value) = header::HeaderValue::from_str(&warning) {
+            response.headers_mut().insert("x-phv-warning", value);
+        }
+    }
+    Ok(response)
 }
 
 #[derive(Deserialize)]
@@ -3827,7 +3873,7 @@ If the compiler reports that a handler's future is not `Send` because of an octo
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test api`
-Expected: 7 tests PASS.
+Expected: 8 tests PASS.
 
 - [ ] **Step 5: Check the real server by hand**
 
@@ -4556,6 +4602,15 @@ fn decimals_stay_exact_through_the_tool() {
 }
 
 #[test]
+fn a_filter_with_no_answers_returns_a_warning_the_model_can_read() {
+    let (_d, v) = new_vault();
+    add_patient(&v);
+    let result = one(&v, "list", json!({"resource_type": "Patient", "where": "brithDate = @1980-01-01"}));
+    assert_eq!(result["isError"], false, "{result}");
+    assert!(result["content"][1]["text"].as_str().unwrap().contains("no true or false answer"), "{result}");
+}
+
+#[test]
 fn problems_come_back_as_tool_errors_and_write_nothing() {
     let (d, v) = new_vault();
     let patient = add_patient(&v);
@@ -4789,10 +4844,16 @@ impl PhvServer {
         }
     }
 
-    #[tool(description = "List records of a type, one JSON resource per line, with an optional FHIRPath filter.")]
+    #[tool(description = "List records of a type, one JSON resource per line, with an optional FHIRPath filter. Filters must return true or false. Use .toDate() when comparing dates, such as effectiveDateTime.toDate() >= @2026-01-01. A warning means some records gave no answer and were left out, so do not report an empty result as no records without reading it.")]
     async fn list(&self, Parameters(args): Parameters<ListArgs>) -> CallToolResult {
-        match self.phv.list(&args.resource_type, args.filter.as_deref()).await {
-            Ok(lines) => ok_text(lines.join("\n")),
+        match self.phv.search(&args.resource_type, args.filter.as_deref()).await {
+            Ok(result) => {
+                let mut content = vec![Content::text(result.lines.join("\n"))];
+                if let Some(warning) = result.warning() {
+                    content.push(Content::text(format!("warning: {warning}")));
+                }
+                CallToolResult::success(content)
+            }
             Err(error) => failed(error),
         }
     }
@@ -5401,6 +5462,7 @@ Use `-` as `FILE` for stdin, and `--json` for machine-readable output.
 - Validation covers base FHIR R4, not profiles.
 - Some required code lists are not enforced, including currencies and MIME types. `cargo test only_the_known_required_bindings_are_uncovered -- --nocapture` lists them.
 - Valid medication timing without a `period` produces a warning, caused by an upstream octofhir issue.
+- Date filters need `.toDate()`: `effectiveDateTime.toDate() >= @2026-01-01`. Without it, `>=` and `<=` on a date give no answer because of an upstream octofhir issue. phv warns when records give no answer, so an empty result with a warning does not mean there are no records.
 - Some FHIR rules on data types are not enforced upstream, such as a `Period` that ends before it starts, or a `Range` whose low is above its high. Check dates and ranges against the original document.
 
 ## Design
