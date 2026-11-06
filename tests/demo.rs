@@ -68,3 +68,16 @@ fn the_demo_lab_draft_validates() {
         &["validate", "demo/lab-2025-02-10/draft.fhir.json"],
     ));
 }
+
+#[test]
+fn the_ready_made_demo_vault_passes_check_and_lists_its_person() {
+    let vault = Path::new("demo/maria-vault");
+    assert_ok(&phv(vault, &["check"]));
+    let listed = phv(vault, &["list", "Patient"]);
+    assert_ok(&listed);
+    assert!(String::from_utf8_lossy(&listed.stdout).contains("Rodriguez"));
+    assert_eq!(
+        line_count(vault.join("records/DocumentReference.ndjson")),
+        18
+    );
+}
