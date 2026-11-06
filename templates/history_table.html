@@ -1,0 +1,11 @@
+<table>
+  <tr><th>Date</th><th>Result</th><th>Reference range</th><th>Flag</th></tr>
+  {% for row in &rows %}
+  <tr>
+    <td>{{ row.date }}</td>
+    <td>{% for line in &row.lines %}{{ line }}{% if !loop.last %}<br>{% endif %}{% else %}See FHIR{% endfor %}</td>
+    <td>{% if let Some(range) = &row.range %}{{ range }}{% endif %}</td>
+    <td class="flag">{% if let Some(flag) = &row.flag %}{{ flag }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>

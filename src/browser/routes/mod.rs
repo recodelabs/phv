@@ -1,6 +1,7 @@
 //! Routes, GET only. Each topic has its own file with its templates and handlers.
 
 mod explorer;
+mod vitals;
 
 use super::guard;
 use super::model::Records;
@@ -12,7 +13,7 @@ use askama::Template;
 use axum::{
     Router,
     extract::{Request, State},
-    http::{Method, StatusCode},
+    http::{HeaderMap, Method, StatusCode},
     middleware,
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
@@ -190,6 +191,11 @@ pub fn render<T: Template>(page: T) -> Result<Response, PageError> {
     }
 }
 
+/// htmx asks for a partial with this header. Anything else gets the full page.
+pub fn wants_partial(headers: &HeaderMap) -> bool {
+    headers.contains_key("hx-request")
+}
+
 async fn home(State(app): State<App>) -> Response {
     Redirect::to(&format!("/v/{}/overview", app.vaults.default_name())).into_response()
 }
@@ -209,6 +215,7 @@ pub fn router(vaults: Vaults) -> Router {
         .route("/", get(home))
         .route("/assets/{file}", get(super::assets::asset))
         .merge(explorer::routes())
+        .merge(vitals::routes())
         .fallback(fallback)
         .with_state(app)
         .layer(middleware::from_fn(guard::headers))

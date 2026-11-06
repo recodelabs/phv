@@ -3,6 +3,7 @@
 pub mod explorer;
 pub mod observation;
 pub mod value;
+pub mod vitals;
 
 use crate::canon::parse_json;
 use crate::error::PhvError;
