@@ -86,6 +86,7 @@ Each `records/<ResourceType>.ndjson` file holds one resource per line.
 - **Key order:** at the top level, `resourceType`, then `id`, then the remaining keys in bytewise order. Nested objects use bytewise order for all keys.
 - **Whitespace:** none outside strings, and every line ends with `\n`.
 - **Line order:** bytewise by `id`. Because every line starts with the same prefix and `"` sorts below every legal id character, `LC_ALL=C sort -c` verifies the order.
+- **Line endings:** `\n` only, with a final newline. A file with `\r` or no final newline is reported by `phv check`, and a write refuses it rather than changing lines it was not asked to change.
 - **Numbers:** kept as written, so `1.50` stays `1.50`. This uses `serde_json`'s `arbitrary_precision` feature. Exponents are normalized (`1e2` becomes `1e+2`) with the same value.
 - **Volatile fields:** `meta.lastUpdated` and `meta.versionId` are removed on write, because Git holds the history. An empty `meta` is removed too.
 
@@ -277,7 +278,7 @@ Termbox's docs say authentication is coming soon, and they give no statement on 
 
 - **AI output is untrusted:** a mapper can only propose resources through validation. It has no path to edit files through phv.
 - **No network use:** phv itself makes no outbound connections, and the test above keeps HTTP clients out of the build. Its only network use is `git` and `gh`, run by `phv setup` when the person chooses GitHub. The lab skill separately sends test names to Termbox.
-- **Data at rest:** files are readable on disk. For this sub-project, the person relies on full-disk encryption and a private repo.
+- **Data at rest:** files are not encrypted by phv. New vault folders and data files are private to the user on macOS and Linux, and otherwise the person relies on full-disk encryption and a private repo.
 - **Remote copies:** pushing to a hosted private repo gives that host readable health data, including original documents. `phv setup` says this before asking, defaults to no, and asks for every vault. phv does not recommend hosted backups until encryption before push is solved, and the docs say so plainly.
 - **Git permanence:** deleted data stays in history until the person rewrites it, and in any existing remote copy after that.
 

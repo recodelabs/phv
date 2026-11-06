@@ -2886,6 +2886,18 @@ async fn check_finds_invalid_content_and_broken_references() {
 }
 
 #[tokio::test]
+async fn check_finds_windows_line_endings_and_a_missing_final_newline() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    phv.add(&lab(&patient, "1.50"), &AddOptions::default()).await.unwrap();
+    let line = records(&phv, "Observation");
+    fs::write(observation_path(&phv), line.replace('\n', "\r\n")).unwrap();
+    assert!(codes(&phv).await.contains(&"PHV-NEWLINE".to_string()));
+    fs::write(observation_path(&phv), line.trim_end()).unwrap();
+    assert!(codes(&phv).await.contains(&"PHV-NEWLINE".to_string()));
+}
+
+#[tokio::test]
 async fn check_finds_a_missing_source_file() {
     let (_d, phv) = phv().await;
     let source = phv.source_add("a.pdf", b"bytes").await.unwrap();
@@ -2919,6 +2931,9 @@ impl Phv {
         let mut parsed: Vec<(String, Value)> = Vec::new();
 
         for resource_type in self.vault().resource_types()? {
+            if let Err(error) = self.vault().check_line_endings(&resource_type) {
+                issues.extend_from_slice(error.issues());
+            }
             let mut seen = HashSet::new();
             let mut previous: Option<String> = None;
             for (index, line) in self.vault().lines(&resource_type)?.into_iter().enumerate() {
