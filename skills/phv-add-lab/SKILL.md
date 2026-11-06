@@ -15,6 +15,10 @@ You map the source document to FHIR. The `phv` binary owns validation, IDs, refe
 - Report what `phv` actually returned, including warnings. Never claim success without its output.
 - Keep personal drafts and review files in an explicitly Git-ignored location outside the vault, and verify the paths with `git check-ignore`. Use synthetic examples only in tracked files. Never upload a personal Bundle to a public validator.
 
+## Use the tools you have
+
+If a phv MCP server is connected, use its tools in place of the commands below: `vault_info`, `source_add`, `validate`, `add`, `get`, `list` and `check`. Tools take the Bundle as JSON text, so no temporary file is needed. Each server serves one person's vault, so read `vault_info` first and stop if the document names someone else.
+
 ## Choose a mode
 
 - **Draft:** prepare a `collection` Bundle and a review table without importing. This needs no vault. If `phv` is unavailable, finish a useful draft and say which validation and import steps remain.
@@ -44,13 +48,13 @@ Keep the `sha256` it prints. If it says `already imported`, tell the person and 
 
 ## 3. Extract and inspect
 
-Extract PDF text with layout preserved, then render and visually inspect all relevant pages. Use OCR if needed and verify it against the image. Check wrapped names, table columns, section headings, footnotes and repeated headers.
+Extract PDF text with layout preserved, then render and visually inspect all relevant pages. Use OCR if needed and verify it against the image. Check wrapped names, table columns, section headings, footnotes and repeated headers. If text extraction isn't available, read the rendered pages and tell the person the values weren't cross-checked against a text layer.
 
 Build a review table with each printed test name, result, unit, reference range, date label, page and corresponding Observation. Preserve section membership. Account for every result row once; headings are not result rows.
 
 ## 4. Look up LOINC codes
 
-Add a LOINC code only if the report prints it or a lookup gives one clear match. For each test, note the printed name, specimen and unit, then search Termbox:
+Look up every test, unless the report already prints its code. Do this by default, including for a draft. Add a LOINC code only if the report prints it or a lookup gives one clear match. For each test, note the printed name, specimen and unit, then search Termbox:
 
 ```bash
 curl -s -G 'https://tx.health-samurai.io/fhir/r4/ValueSet/$expand' \
@@ -68,6 +72,8 @@ The first result is often wrong: searching `creatinine` alone returns ratios and
 - Match the test, specimen and unit. A creatinine reported in `mg/dL` is `[Mass/volume]` (`2160-0`), while one in `umol/L` is `[Moles/volume]` (`14682-9`).
 - If the report does not print the specimen, do not assume one. Ask the person once for the whole report, such as "Were these blood tests, and do you know if they used serum or plasma?", and apply the answer to every test it covers. If they don't know, leave those codes out.
 - Search with other words if nothing fits, because search matches words and does not understand synonyms. Add the specimen and what was measured: `glucose` alone mostly returns enzymes and ratios, while `glucose serum plasma` is closer.
+- For a report that isn't in English, translate only the test name to search, such as `Гемоглобин` to `hemoglobin blood`. The printed name still goes in `code.text`, and the `display` comes from Termbox.
+- Culture and microscopy results often have no single matching code. Leave those uncoded rather than picking a near match.
 
 Confirm the code you chose, and use the `display` it returns:
 
@@ -113,7 +119,6 @@ Create a private temporary file with `BUNDLE=$(mktemp)`, never a fixed path such
         },
         "subject": { "reference": "Patient/abc123" },
         "effectiveDateTime": "2026-03-14",
-        "performer": [{ "display": "Example Labs" }],
         "valueQuantity": { "value": 1.50, "unit": "mg/dL" },
         "referenceRange": [{ "low": { "value": 0.70, "unit": "mg/dL" }, "high": { "value": 1.30, "unit": "mg/dL" }, "text": "0.70 - 1.30 mg/dL" }]
       }
@@ -127,6 +132,7 @@ Create a private temporary file with `BUNDLE=$(mktemp)`, never a fixed path such
 - Put the printed test name in `code.text`, preserving meaningful qualifiers and joining layout-only line wraps with spaces. Do not replace it with an English translation.
 - Copy values exactly. Normalize decimal commas to JSON decimal points, preserving precision and trailing zeros such as `1.50`, and keep the printed form in the review table. Do not round or convert units.
 - Use `valueQuantity` for numbers and `valueString` for printed text such as `Negative`, never both on one Observation. For `<0,5`, use `"valueQuantity": {"value": 0.5, "comparator": "<", "unit": "..."}`.
+- Use `valueString` exactly as printed for anything that isn't a plain measurement, such as `3 C. albicans` or the range `0-1`. If a column header holds part of the value, such as `10^` above a result of `7`, keep the printed name and value as they are, and do not calculate `10^7`.
 - Copy the printed unit to `valueQuantity.unit`. A blank unit stays absent; do not invent a unit for a ratio.
 - Keep fasting and post-load results separate, with the timing qualifier in the name. Do not invent specimen times.
 - Preserve panel or section context in Observation notes when several panels share one report.
@@ -141,10 +147,10 @@ Create a private temporary file with `BUNDLE=$(mktemp)`, never a fixed path such
 
 - Convert a date to ISO format only when its meaning supports the field. A collection date may populate `effectiveDateTime`; an analysis date is not automatically a collection date.
 - Keep ambiguous date labels verbatim in the private review file and Observation notes, and omit unsupported structured date fields until resolved.
+- If the report prints no clear collection date, ask the person. If they don't know, leave it out and tell them that date filters won't find these results until it's added.
 - `DiagnosticReport.issued` is an instant needing time to the second and a timezone. A date alone, or a print timestamp without a timezone, is not enough. Do not invent midnight, a timezone or a collection time.
 - Set clinical status from source evidence, and use `unknown` if it can't be established. Never default to `final` merely because an example does.
 - Name labs and doctors with `display` only, such as `{"display": "Example Labs"}`. A `reference` must point at something in the vault or this Bundle, or `phv` rejects it.
-- When the report prints the lab that ran the tests, put it in `performer` on the DiagnosticReport and on every result Observation. An International Patient Summary needs it on each result. If no lab is printed, leave `performer` out rather than guessing.
 
 ## 6. Check the draft
 
@@ -170,7 +176,7 @@ Let the library assign IDs and create provenance. Report what it created, left u
 
 ## 9. Finish
 
-Don't commit or push the vault automatically. If the vault has a `.git` folder, tell the person to review and commit it. `<vault>` is the vault's folder from `phv vaults`. Plain `git diff` shows nothing for a new file, so `add -N` comes first:
+Run `phv check` and report the result. Don't commit or push the vault automatically. If the vault has a `.git` folder, tell the person to review and commit it. `<vault>` is the vault's folder from `phv vaults`. Plain `git diff` shows nothing for a new file, so `add -N` comes first:
 
 ```bash
 git -C <vault> status

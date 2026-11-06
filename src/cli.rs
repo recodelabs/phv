@@ -87,12 +87,6 @@ pub enum Command {
     },
     /// Run a local MCP server over stdio for one vault, for Claude and other AI tools.
     Mcp,
-    /// Build an International Patient Summary (IPS) document from the vault. Changes nothing.
-    Ips {
-        /// Write the document to this file, outside the vault, instead of stdout.
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
     /// Import an export from another system.
     Import {
         #[command(subcommand)]
@@ -144,40 +138,6 @@ fn split_target(target: &str) -> Result<(&str, &str), PhvError> {
     target
         .split_once('/')
         .ok_or_else(|| PhvError::Usage(format!("expected Type/id, got {target}")))
-}
-
-/// The `--out` path for an IPS, refused when it is inside the vault, so a summary never
-/// lands among the records.
-fn ips_target(path: &Path, phv: &Phv) -> Result<PathBuf, PhvError> {
-    let name = path.file_name().ok_or_else(|| {
-        PhvError::Usage(format!("--out needs a file name, got {}", path.display()))
-    })?;
-    let parent = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => p,
-        _ => Path::new("."),
-    };
-    let dir = parent
-        .canonicalize()
-        .map_err(|e| PhvError::Usage(format!("cannot use {}: {e}", parent.display())))?;
-    let root = phv.vault().root().canonicalize()?;
-    if dir.starts_with(&root) {
-        return Err(PhvError::Usage(format!(
-            "--out {} is inside the vault: write the IPS somewhere else",
-            path.display()
-        )));
-    }
-    Ok(dir.join(name))
-}
-
-/// Writes through a temporary file in the same folder, readable only by the user, then
-/// renames it over the target.
-fn write_private(target: &Path, bytes: &[u8]) -> Result<(), PhvError> {
-    let dir = target.parent().unwrap_or(Path::new("."));
-    let mut file = tempfile::NamedTempFile::new_in(dir)?;
-    file.write_all(bytes)?;
-    file.as_file().sync_all()?;
-    file.persist(target).map_err(|e| PhvError::Io(e.error))?;
-    Ok(())
 }
 
 fn now() -> String {
@@ -421,41 +381,6 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         }
         Command::Mcp => {
             crate::mcp::serve(phv).await?;
-            Ok(ExitCode::SUCCESS)
-        }
-        Command::Ips { out } => {
-            let options = crate::ips::IpsOptions {
-                generated_at: now(),
-            };
-            // Refuse before the work, so a bad path fails fast.
-            let target = out.as_deref().map(|p| ips_target(p, &phv)).transpose()?;
-            let report = phv.ips(&options).await?;
-            let document = serde_json::to_string_pretty(&report.bundle).expect("bundles serialize");
-            if let Some(target) = &target {
-                write_private(target, format!("{document}\n").as_bytes())?;
-            }
-            if cli.json {
-                print_json(&report)?;
-            } else {
-                if target.is_none() {
-                    out_line(&document)?;
-                }
-                for omitted in &report.omitted {
-                    let section = omitted
-                        .section
-                        .map(|s| format!(" from {s}"))
-                        .unwrap_or_default();
-                    eprintln!("left out {}{section}:", omitted.reference);
-                    print_issues(&omitted.issues);
-                }
-                print_issues(&report.warnings);
-                if let Some(summary) = report.summary() {
-                    eprintln!("warning: {summary}");
-                }
-                if let Some(target) = &target {
-                    eprintln!("wrote the IPS to {}", target.display());
-                }
-            }
             Ok(ExitCode::SUCCESS)
         }
     }
