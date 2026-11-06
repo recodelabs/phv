@@ -113,6 +113,7 @@ Create a private temporary file with `BUNDLE=$(mktemp)`, never a fixed path such
         },
         "subject": { "reference": "Patient/abc123" },
         "effectiveDateTime": "2026-03-14",
+        "performer": [{ "display": "Example Labs" }],
         "valueQuantity": { "value": 1.50, "unit": "mg/dL" },
         "referenceRange": [{ "low": { "value": 0.70, "unit": "mg/dL" }, "high": { "value": 1.30, "unit": "mg/dL" }, "text": "0.70 - 1.30 mg/dL" }]
       }
@@ -143,6 +144,7 @@ Create a private temporary file with `BUNDLE=$(mktemp)`, never a fixed path such
 - `DiagnosticReport.issued` is an instant needing time to the second and a timezone. A date alone, or a print timestamp without a timezone, is not enough. Do not invent midnight, a timezone or a collection time.
 - Set clinical status from source evidence, and use `unknown` if it can't be established. Never default to `final` merely because an example does.
 - Name labs and doctors with `display` only, such as `{"display": "Example Labs"}`. A `reference` must point at something in the vault or this Bundle, or `phv` rejects it.
+- When the report prints the lab that ran the tests, put it in `performer` on the DiagnosticReport and on every result Observation. An International Patient Summary needs it on each result. If no lab is printed, leave `performer` out rather than guessing.
 
 ## 6. Check the draft
 
