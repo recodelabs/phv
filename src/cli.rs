@@ -30,6 +30,12 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Walk through creating a vault for one person. Run again for each family member.
+    Setup,
+    /// List registered vaults. The default is marked with *.
+    Vaults,
+    /// Change the default vault.
+    Use { name: String },
     /// Create a new data repo layout.
     Init { path: PathBuf },
     /// Check a resource or Bundle without writing. Use - for stdin.
@@ -98,6 +104,19 @@ pub(crate) fn vault_path(flag: Option<&Path>) -> Result<PathBuf, PhvError> {
     resolve_vault_path(flag, env.as_deref(), config.as_deref())
 }
 
+fn home_dir() -> Result<PathBuf, PhvError> {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| PhvError::Usage("HOME is not set".into()))
+}
+
+/// Without Git, these changes have no history to restore from.
+fn warn_if_no_history(phv: &Phv) {
+    if !phv.vault().root().join(".git").exists() {
+        eprintln!("warning: this vault has no Git history, so this change cannot be undone");
+    }
+}
+
 fn read_json(file: &str) -> Result<Value, PhvError> {
     let mut text = String::new();
     if file == "-" {
@@ -152,6 +171,40 @@ fn print_write(report: &WriteReport, json: bool) {
 
 /// Runs a command. Findings that mean failure are returned as errors or exit code 1.
 pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
+    match &cli.command {
+        Command::Setup => {
+            crate::setup::run(&home_dir()?).await?;
+            return Ok(ExitCode::SUCCESS);
+        }
+        Command::Vaults => {
+            let registry = crate::setup::load_registry(&home_dir()?)?;
+            if cli.json {
+                print_json(&registry);
+            } else if registry.vaults.is_empty() {
+                println!("no vaults yet: run phv setup");
+            } else {
+                for (name, path) in &registry.vaults {
+                    let mark = if registry.default.as_deref() == Some(name) {
+                        "*"
+                    } else {
+                        " "
+                    };
+                    println!("{mark} {name}  {}", path.display());
+                }
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+        Command::Use { name } => {
+            let home = home_dir()?;
+            let mut registry = crate::setup::load_registry(&home)?;
+            registry.use_vault(name)?;
+            crate::setup::save_registry(&home, &registry)?;
+            println!("default vault is now {name}");
+            return Ok(ExitCode::SUCCESS);
+        }
+        _ => {}
+    }
+
     if let Command::Init { path } = &cli.command {
         let vault = Vault::init(path)?;
         if cli.json {
@@ -171,7 +224,11 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
     let phv = Phv::new(vault).await?;
 
     match cli.command {
-        Command::Init { .. } | Command::Import { .. } => unreachable!("handled above"),
+        Command::Setup
+        | Command::Vaults
+        | Command::Use { .. }
+        | Command::Init { .. }
+        | Command::Import { .. } => unreachable!("handled above"),
         Command::Validate { file } => {
             let issues = phv.validate_submission(&read_json(&file)?).await?;
             let failed = issues.iter().any(Issue::is_error);
@@ -217,11 +274,15 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
                 .replace(resource_type, id, &read_json(&file)?, dry_run)
                 .await?;
             print_write(&report, cli.json);
+            if !dry_run && !report.updated.is_empty() {
+                warn_if_no_history(&phv);
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Rm { target } => {
             let (resource_type, id) = split_target(&target)?;
             phv.remove(resource_type, id).await?;
+            warn_if_no_history(&phv);
             if cli.json {
                 print_json(&serde_json::json!({"removed": target}));
             } else {
