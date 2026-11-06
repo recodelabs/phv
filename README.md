@@ -10,7 +10,7 @@ phv keeps your health records as FHIR R4 files on your own machine. AI can help 
 
 ## Status
 
-Early development. It runs on a laptop only. The main ways in are `phv setup`, the MCP server (`phv mcp`) and the lab skill. `phv import apple-activity` imports Apple activity exports, and `phv ips` builds an International Patient Summary. There is no web dashboard or health memory yet.
+Early development. It runs on a laptop only. The main ways in are `phv setup`, the MCP server (`phv mcp`) and the lab skill. `phv import apple-activity` imports Apple activity exports. There is no web dashboard, health memory or IPS generation yet.
 
 ## Install
 
@@ -114,16 +114,6 @@ A session can't delete records: use `phv rm` for that.
 
 To stop using a vault in Claude Code, run `claude mcp remove --scope user phv-maya`.
 
-## Share a summary with a clinician
-
-```bash
-phv ips --out ~/Desktop/summary.json
-```
-
-`phv ips` builds an [International Patient Summary](https://hl7.org/fhir/uv/ips/STU2/) (IPS 2.0.0) from the vault: problems, allergies, medications, immunizations, results, procedures, past illness, social history and vital signs. It is a FHIR document Bundle that IPS viewers and many health systems can read. It changes nothing in the vault, and `--out` must be outside it.
-
-Each record is checked against its IPS profile. A record that does not meet it is left out, and phv lists each one with the reason, so you can correct it with `phv replace` and run `phv ips` again. Activity data from `phv import apple-activity` is not included.
-
 ## Commands
 
 | Command | Purpose |
@@ -141,7 +131,6 @@ Each record is checked against its IPS profile. A record that does not meet it i
 | `phv source add FILE` | Store an original file |
 | `phv check` | Check the whole vault |
 | `phv import apple-activity FILE [--dry-run] [--keep-overlaps]` | Import steps and workouts from an Apple activity export |
-| `phv ips [--out FILE]` | Build an International Patient Summary, changing nothing |
 | `phv serve` | Run the REST API on `127.0.0.1:8747` |
 | `phv mcp` | Run a local MCP server for one vault, for Claude sessions |
 
@@ -152,7 +141,6 @@ Use `-` as `FILE` for stdin with `validate`, `add` and `replace`, and `--json` f
 - **Readable files:** records are not encrypted by phv. Use full-disk encryption and keep your repo private.
 - **Hosted repos:** pushing to a hosted private repo, including one created by `phv setup`, gives that host readable health data and original documents. phv has no encrypted backup yet, so it does not recommend this.
 - **Git history:** in a vault with Git, `phv rm` removes a record from the files, but it stays in history until you rewrite it, and in any remote copies after that. Removing a `DocumentReference` record does not delete the original file in `sources/`: delete that file too if the document must go. It stays in history like any other removed data.
-- **Summaries:** an IPS holds your whole clinical summary. Share it only with people who need it. The MCP `ips` tool sends all of it to Anthropic.
 - **AI tools:** anything you send to a hosted AI is subject to that provider's terms. Use a local model for data that must stay on your device.
 - **Not medical advice:** check every extracted value against the original document. phv checks the structure of records, not whether a value was read correctly.
 
@@ -163,12 +151,10 @@ Use `-` as `FILE` for stdin with `validate`, `add` and `replace`, and `--json` f
 - Valid medication timing without a `period` produces a warning, caused by an upstream octofhir issue.
 - Date filters need `.toDate()`: `effectiveDateTime.toDate() >= @2026-01-01`. Without it, `>=` and `<=` on a date give no answer because of an upstream octofhir issue. phv warns when records give no answer, so an empty result with a warning does not mean there are no records.
 - Some FHIR rules on data types are not enforced upstream, such as a `Period` that ends before it starts, or a `Range` whose low is above its high. Check dates and ranges against the original document.
-- An IPS needs the person's name and birth date on the `Patient`. Lab results need the lab that ran them: phv takes it from the result's report when the result has none.
-- phv checks IPS records against their profiles with octofhir, which misses some rules, such as a vital sign's UCUM unit code. CI also checks a sample IPS with the HL7 Java validator.
 
 ## Design
 
-See [the vault core design](docs/superpowers/specs/2026-11-06-vault-core-design.md) and [the IPS design](docs/superpowers/specs/2026-11-06-ips-design.md).
+See [the vault core design](docs/superpowers/specs/2026-11-06-vault-core-design.md).
 
 ## License
 
