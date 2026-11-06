@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Personal Health Vault logo</title>
+  <desc id="desc">A medical cross protected inside a shield shaped like a folder.</desc>
+  <defs>
+    <mask id="cross-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="white"/>
+      <path d="M113 87a9 9 0 0 0-9 9v23H81a9 9 0 0 0-9 9v12a9 9 0 0 0 9 9h23v23a9 9 0 0 0 9 9h30a9 9 0 0 0 9-9v-23h23a9 9 0 0 0 9-9v-12a9 9 0 0 0-9-9h-23V96a9 9 0 0 0-9-9z" fill="black"/>
+    </mask>
+  </defs>
+  <path d="M35 80V58c0-16 12-28 28-28h47c10 0 15 3 21 11l11 14h51c16 0 28 12 28 28v4H35z" fill="#46B7A4"/>
+  <path d="M35 92c0-12 10-22 22-22h142c12 0 22 10 22 22v51c0 42-27 72-79 99a29 29 0 0 1-28 0C62 215 35 185 35 143z" fill="#142B3B" mask="url(#cross-cutout)"/>
+</svg>

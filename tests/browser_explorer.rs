@@ -335,3 +335,26 @@ async fn a_page_number_that_is_not_a_number_means_the_first_page() {
         assert_eq!(reply.status, StatusCode::OK, "{uri}");
     }
 }
+
+#[tokio::test]
+async fn the_logo_is_in_the_header_and_is_the_favicon() {
+    let app = app();
+    let logo = get(&app, "/assets/logo.svg").await;
+    assert_eq!(logo.status, StatusCode::OK);
+    assert_eq!(logo.header("content-type"), "image/svg+xml");
+    assert!(logo.text().contains("<svg"));
+    let page = get(&app, "/v/vault/overview").await.text();
+    assert!(
+        page.contains(r#"<img src="/assets/logo.svg" alt="" width="24" height="24">"#),
+        "{page}"
+    );
+    assert!(
+        page.contains(r#"<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">"#),
+        "{page}"
+    );
+    let error = get(&app, "/nowhere").await.text();
+    assert!(
+        error.contains(r#"<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">"#),
+        "{error}"
+    );
+}

@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="htmx-config" content='{"allowEval":false,"selfRequestsOnly":true,"includeIndicatorStyles":false,"historyCacheSize":0,"refreshOnHistoryMiss":true}'>
 <title>{% block title %}{% endblock %} · {{ chrome.person }} · phv</title>
+<link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
 <link rel="stylesheet" href="/assets/style.css">
 <script defer src="/assets/htmx.min.js"></script>
 {% block scripts %}{% endblock %}
 </head>
 <body>
 <header class="top">
-  <span class="brand">phv</span>
+  <span class="brand"><img src="/assets/logo.svg" alt="" width="24" height="24">phv</span>
   {% if !chrome.switcher.is_empty() %}
   <details class="switcher">
     <summary>{{ chrome.vault }}</summary>

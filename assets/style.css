@@ -31,7 +31,9 @@ a { color: var(--accent); }
 h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
 h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem 1rem; background: var(--panel); border-bottom: 1px solid var(--line); }
-.brand { font-weight: 700; }
+.brand { display: inline-flex; align-items: center; gap: .4rem; font-weight: 700; }
+.brand img { display: block; }
+@media (prefers-color-scheme: dark) { .brand img { background: #ecece6; border-radius: 6px; padding: 2px; } }
 .switcher { position: relative; }
 .switcher summary { cursor: pointer; border: 1px solid var(--line); border-radius: 6px; padding: .15rem .6rem; }
 .switcher ul { position: absolute; right: 0; z-index: 1; margin: .25rem 0 0; padding: .35rem; list-style: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; min-width: 10rem; }

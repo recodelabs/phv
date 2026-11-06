@@ -11,6 +11,7 @@ const HTMX: &str = include_str!("../../assets/htmx-2.0.11.min.js");
 const D3: &str = include_str!("../../assets/d3-7.9.2.min.js");
 const PLOT: &str = include_str!("../../assets/plot-0.6.19.min.js");
 const ACTIVITY: &str = include_str!("../../assets/activity.js");
+const LOGO: &str = include_str!("../../assets/logo.svg");
 
 pub async fn asset(Path(file): Path<String>) -> Response {
     let (content_type, body) = match file.as_str() {
@@ -19,6 +20,7 @@ pub async fn asset(Path(file): Path<String>) -> Response {
         "d3.min.js" => ("text/javascript; charset=utf-8", D3),
         "plot.min.js" => ("text/javascript; charset=utf-8", PLOT),
         "activity.js" => ("text/javascript; charset=utf-8", ACTIVITY),
+        "logo.svg" => ("image/svg+xml", LOGO),
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
     ([(header::CONTENT_TYPE, content_type)], body).into_response()
