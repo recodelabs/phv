@@ -550,3 +550,28 @@ fn an_empty_flag_or_env_counts_as_unset() {
     assert_eq!(r(None, Some("")), Path::new("/from/config"));
     assert!(resolve_vault_path(Some(Path::new("")), Some(""), None).is_err());
 }
+
+#[test]
+fn missing_vault_folders_are_recreated_on_write() {
+    let (_d, v) = vault();
+    fs::remove_dir_all(v.root().join("records")).unwrap();
+    v.apply(&[upsert("a", A)]).unwrap();
+    assert_eq!(v.resource_types().unwrap(), ["Observation"]);
+    assert_eq!(file(&v), format!("{A}\n"));
+}
+
+#[test]
+fn resource_types_is_empty_when_records_is_missing() {
+    let (_d, v) = vault();
+    fs::remove_dir_all(v.root().join("records")).unwrap();
+    assert!(v.resource_types().unwrap().is_empty());
+}
+
+#[test]
+fn write_atomic_creates_a_missing_parent_folder() {
+    let (_d, v) = vault();
+    fs::remove_dir_all(v.root().join("sources")).unwrap();
+    let target = v.root().join("sources/note.txt");
+    v.write_atomic(&target, b"hi").unwrap();
+    assert_eq!(fs::read_to_string(target).unwrap(), "hi");
+}

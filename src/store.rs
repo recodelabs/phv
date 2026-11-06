@@ -269,11 +269,12 @@ impl Vault {
         create_private_dir(&root.join("records"))?;
         create_private_dir(&root.join("sources"))?;
         create_private_dir(&root.join(".phv"))?;
+        // phv.toml goes last: it is what marks the vault as made, so a failure above can be retried.
+        ensure_gitignore(&root)?;
         fs::write(
             root.join("phv.toml"),
             format!("format_version = {FORMAT_VERSION}\nfhir_version = \"4.0.1\"\n"),
         )?;
-        ensure_gitignore(&root)?;
         Ok(Vault { root })
     }
 
@@ -327,7 +328,12 @@ impl Vault {
     /// Resource types that have a file, sorted.
     pub fn resource_types(&self) -> Result<Vec<String>, PhvError> {
         let mut types = Vec::new();
-        for entry in fs::read_dir(self.root.join("records"))? {
+        let entries = match fs::read_dir(self.root.join("records")) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(types),
+            Err(e) => return Err(e.into()),
+        };
+        for entry in entries {
             let path = entry?.path();
             if path.extension().is_some_and(|e| e == "ndjson")
                 && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
@@ -383,6 +389,8 @@ impl Vault {
         let dir = target
             .parent()
             .ok_or_else(|| PhvError::Usage("target has no parent".into()))?;
+        // Git does not track empty folders, so a clone may lack the target's folder.
+        create_private_dir(dir)?;
         let tmp_dir = self.root.join(".phv/tmp");
         create_private_dir(&tmp_dir)?;
         let mut temp = tempfile::NamedTempFile::new_in(tmp_dir)?;
