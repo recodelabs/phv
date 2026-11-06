@@ -4,6 +4,7 @@ mod clinical;
 mod documents;
 mod explorer;
 mod labs;
+mod overview;
 mod vitals;
 
 use super::guard;
@@ -222,6 +223,7 @@ pub fn router(vaults: Vaults) -> Router {
         .merge(labs::routes())
         .merge(clinical::routes())
         .merge(documents::routes())
+        .merge(overview::routes())
         .fallback(fallback)
         .with_state(app)
         .layer(middleware::from_fn(guard::headers))
