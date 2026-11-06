@@ -1,0 +1,24 @@
+{% if chips.len() == 1 %}
+<p>No documents yet.</p>
+{% else %}
+<div class="chips">
+  {% for chip in &chips %}
+  <a class="chip" href="/v/{{ vault }}/documents{% if !chip.code.is_empty() %}?category={{ chip.code }}{% endif %}" hx-get="/v/{{ vault }}/documents{% if !chip.code.is_empty() %}?category={{ chip.code }}{% endif %}" hx-target="#doc-list" hx-push-url="true"{% if chip.on %} aria-current="true"{% endif %}>{{ chip.label }} {{ chip.count }}</a>
+  {% endfor %}
+</div>
+<table>
+  <tr><th>Added</th><th>File</th><th>Category</th><th>Records from it</th></tr>
+  {% for row in &rows %}
+  <tr>
+    <td>{{ row.date }}</td>
+    <td>
+      {% if row.has_file %}{% if let Some(hash) = &row.sha256 %}<a href="/v/{{ vault }}/sources/{{ hash }}">{{ row.title }}</a>{% endif %}
+      {% else %}{{ row.title }} <span class="muted">No file stored</span>{% endif %}
+      · <a class="muted" href="/v/{{ vault }}/fhir/DocumentReference/{{ row.id }}">FHIR</a>
+    </td>
+    <td>{{ row.category_label }}</td>
+    <td>{{ row.record_count }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}

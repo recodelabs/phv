@@ -1,5 +1,6 @@
 //! Routes, GET only. Each topic has its own file with its templates and handlers.
 
+mod documents;
 mod explorer;
 mod vitals;
 
@@ -216,6 +217,7 @@ pub fn router(vaults: Vaults) -> Router {
         .route("/assets/{file}", get(super::assets::asset))
         .merge(explorer::routes())
         .merge(vitals::routes())
+        .merge(documents::routes())
         .fallback(fallback)
         .with_state(app)
         .layer(middleware::from_fn(guard::headers))
