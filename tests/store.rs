@@ -233,3 +233,320 @@ fn use_vault_changes_the_default_only_for_a_known_name() {
     assert_eq!(registry.default.as_deref(), Some("ben"));
     assert!(registry.use_vault("nobody").is_err());
 }
+
+// ---- hardening ----
+
+use phv::PhvError;
+
+fn issue_codes(err: &PhvError) -> Vec<String> {
+    err.issues().iter().map(|i| i.code.clone()).collect()
+}
+
+#[test]
+fn init_keeps_an_existing_gitignore_and_appends_the_phv_entry() {
+    for (before, after) in [
+        ("target/\n", "target/\n.phv/\n"),
+        ("target/", "target/\n.phv/\n"),
+        ("target/\n.phv/\n", "target/\n.phv/\n"),
+        ("/.phv/\nfoo\n", "/.phv/\nfoo\n"),
+        ("# .phv/\n", "# .phv/\n.phv/\n"),
+        ("a\r\nb\r\n", "a\r\nb\r\n.phv/\n"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("data");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join(".gitignore"), before).unwrap();
+        Vault::init(&root).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join(".gitignore")).unwrap(),
+            after,
+            "from {before:?}"
+        );
+    }
+}
+
+#[test]
+fn line_id_ignores_nested_and_escaped_ids() {
+    let nested = r#"{"resourceType":"Patient","name":[{"family":"x","id":"evil"}],"id":"real"}"#;
+    assert_eq!(line_id(nested), None);
+    assert_eq!(
+        line_id(r#"{"resourceType":"Patient","name":[{"id":"evil"}]}"#),
+        None
+    );
+    assert_eq!(line_id(r#"{"resourceType":"Patient","id":"a\"b"}"#), None);
+    assert_eq!(line_id(r#"{"resourceType":"Patient","id":"a\\b"}"#), None);
+    assert_eq!(
+        line_id(r#"{"resourceType":"Patient","id":"real","active":true}"#),
+        Some("real")
+    );
+}
+
+fn assert_usage_and_nothing_written(v: &Vault, changes: &[Change]) {
+    let err = v.apply(changes).unwrap_err();
+    assert!(matches!(err, PhvError::Usage(_)), "{err:?}");
+    assert!(v.resource_types().unwrap().is_empty());
+}
+
+#[test]
+fn apply_rejects_inconsistent_upserts_and_writes_nothing() {
+    let (_d, v) = vault();
+    // The line's ID differs from the change's ID.
+    assert_usage_and_nothing_written(&v, &[upsert("x", A)]);
+    // The line is a different resource type.
+    assert_usage_and_nothing_written(&v, &[upsert("p", r#"{"resourceType":"Patient","id":"p"}"#)]);
+    // The line holds a newline or carriage return.
+    assert_usage_and_nothing_written(
+        &v,
+        &[upsert(
+            "a",
+            "{\"resourceType\":\"Observation\",\"id\":\"a\",\"v\":\"x\ny\"}",
+        )],
+    );
+    assert_usage_and_nothing_written(
+        &v,
+        &[upsert(
+            "a",
+            "{\"resourceType\":\"Observation\",\"id\":\"a\",\"v\":\"x\ry\"}",
+        )],
+    );
+    // One bad change stops the good one before it.
+    assert_usage_and_nothing_written(&v, &[upsert("a", A), upsert("x", B)]);
+}
+
+#[test]
+fn crlf_files_are_refused_and_left_alone() {
+    let (_d, v) = vault();
+    let path = v.root().join("records/Observation.ndjson");
+    let crlf = format!("{A}\r\n{C}\r\n");
+    fs::write(&path, &crlf).unwrap();
+    let err = v.check_line_endings("Observation").unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)));
+    assert_eq!(issue_codes(&err), ["PHV-NEWLINE"]);
+    let err = v.apply(&[upsert("b", B)]).unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)));
+    assert_eq!(issue_codes(&err), ["PHV-NEWLINE"]);
+    assert_eq!(fs::read_to_string(&path).unwrap(), crlf);
+}
+
+#[test]
+fn a_missing_final_newline_is_refused_and_left_alone() {
+    let (_d, v) = vault();
+    let path = v.root().join("records/Observation.ndjson");
+    let no_newline = format!("{A}\n{C}");
+    fs::write(&path, &no_newline).unwrap();
+    let err = v.check_line_endings("Observation").unwrap_err();
+    assert_eq!(issue_codes(&err), ["PHV-NEWLINE"]);
+    assert!(v.apply(&[upsert("b", B)]).is_err());
+    assert_eq!(fs::read_to_string(&path).unwrap(), no_newline);
+}
+
+#[test]
+fn line_endings_pass_for_good_empty_and_missing_files() {
+    let (_d, v) = vault();
+    assert!(v.check_line_endings("Observation").is_ok());
+    v.apply(&[upsert("a", A)]).unwrap();
+    assert!(v.check_line_endings("Observation").is_ok());
+    fs::write(v.root().join("records/Empty.ndjson"), "").unwrap();
+    assert!(v.check_line_endings("Empty").is_ok());
+    assert!(v.check_line_endings("../x").is_err());
+}
+
+#[test]
+fn records_holds_only_ndjson_files_after_writes() {
+    let (_d, v) = vault();
+    v.apply(&[upsert("a", A), upsert("b", B)]).unwrap();
+    v.apply(&[upsert("a", A)]).unwrap();
+    v.apply(&[Change::Remove {
+        resource_type: "Observation".into(),
+        id: "a".into(),
+    }])
+    .unwrap();
+    let names: Vec<_> = fs::read_dir(v.root().join("records"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    assert_eq!(names, ["Observation.ndjson"]);
+    // Temporary files live under .phv/tmp and are gone after the rename.
+    let tmp = v.root().join(".phv/tmp");
+    assert!(tmp.is_dir());
+    assert_eq!(fs::read_dir(tmp).unwrap().count(), 0);
+}
+
+fn repo_with_config(config: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join(".git")).unwrap();
+    fs::write(dir.path().join(".git/config"), config).unwrap();
+    dir
+}
+
+fn remote(url: &str) -> String {
+    format!("[remote \"origin\"]\n\turl = {url}\n")
+}
+
+#[test]
+fn the_public_repo_is_refused_in_every_url_form() {
+    for url in [
+        "git@github.com:recodelabs/phv.git",
+        "git@github.com:recodelabs/phv",
+        "git@github.com:RecodeLabs/phv.git",
+        "https://github.com/recodelabs/phv",
+        "https://github.com/recodelabs/phv.git",
+        "https://github.com/RecodeLabs/phv.git",
+        "https://github.com/recodelabs/phv/",
+        "https://github.com/recodelabs/phv.git/",
+        "https://user:token@github.com/recodelabs/phv.git",
+        "ssh://git@github.com/recodelabs/phv.git",
+        "recodelabs/phv",
+    ] {
+        let dir = repo_with_config(&remote(url));
+        assert!(
+            Vault::init(&dir.path().join("inside")).is_err(),
+            "{url} should be refused"
+        );
+    }
+    let dir = repo_with_config("[remote \"origin\"]\n\turl=git@github.com:recodelabs/phv.git\n");
+    assert!(Vault::init(&dir.path().join("inside")).is_err());
+}
+
+#[test]
+fn similar_repo_names_are_allowed() {
+    for url in [
+        "git@github.com:recodelabs/phv-data.git",
+        "git@github.com:notrecodelabs/phv.git",
+        "https://github.com/notrecodelabs/phv",
+        "https://github.com/recodelabs/phv-vault",
+        "https://github.com/recodelabs/phv/extra",
+    ] {
+        let dir = repo_with_config(&remote(url));
+        assert!(
+            Vault::init(&dir.path().join("inside")).is_ok(),
+            "{url} should be allowed"
+        );
+    }
+}
+
+#[test]
+fn a_worktree_of_the_public_repo_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let main = dir.path().join("main");
+    fs::create_dir_all(main.join(".git/worktrees/wt")).unwrap();
+    fs::write(
+        main.join(".git/config"),
+        remote("git@github.com:recodelabs/phv.git"),
+    )
+    .unwrap();
+    fs::write(main.join(".git/worktrees/wt/commondir"), "../..\n").unwrap();
+    let wt = dir.path().join("wt");
+    fs::create_dir_all(&wt).unwrap();
+    // A relative gitdir resolves against the directory that holds the .git file.
+    fs::write(wt.join(".git"), "gitdir: ../main/.git/worktrees/wt\n").unwrap();
+    assert!(Vault::init(&wt.join("inside")).is_err());
+    // An absolute gitdir works too.
+    fs::write(
+        wt.join(".git"),
+        format!("gitdir: {}\n", main.join(".git/worktrees/wt").display()),
+    )
+    .unwrap();
+    assert!(Vault::init(&wt.join("inside2")).is_err());
+}
+
+#[test]
+fn a_submodule_style_git_file_is_checked_without_commondir() {
+    let dir = tempfile::tempdir().unwrap();
+    let gitdir = dir.path().join("modules/phv");
+    fs::create_dir_all(&gitdir).unwrap();
+    fs::write(
+        gitdir.join("config"),
+        remote("https://github.com/recodelabs/phv.git"),
+    )
+    .unwrap();
+    let sub = dir.path().join("sub");
+    fs::create_dir_all(&sub).unwrap();
+    fs::write(sub.join(".git"), "gitdir: ../modules/phv\n").unwrap();
+    assert!(Vault::init(&sub.join("inside")).is_err());
+}
+
+#[test]
+fn a_worktree_of_a_private_repo_is_allowed() {
+    let dir = tempfile::tempdir().unwrap();
+    let main = dir.path().join("main");
+    fs::create_dir_all(main.join(".git/worktrees/wt")).unwrap();
+    fs::write(
+        main.join(".git/config"),
+        remote("git@github.com:recodelabs/phv-data.git"),
+    )
+    .unwrap();
+    fs::write(main.join(".git/worktrees/wt/commondir"), "../..\n").unwrap();
+    let wt = dir.path().join("wt");
+    fs::create_dir_all(&wt).unwrap();
+    fs::write(wt.join(".git"), "gitdir: ../main/.git/worktrees/wt\n").unwrap();
+    assert!(Vault::init(&wt.join("inside")).is_ok());
+}
+
+#[cfg(unix)]
+mod unix_modes {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn mode(path: &Path) -> u32 {
+        fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn new_folders_are_private_and_data_files_are_0600() {
+        let (_d, v) = vault();
+        let _lock = v.lock().unwrap();
+        for sub in ["", "records", "sources", ".phv"] {
+            assert_eq!(mode(&v.root().join(sub)), 0o700, "{sub:?}");
+        }
+        v.apply(&[upsert("a", A)]).unwrap();
+        assert_eq!(mode(&v.root().join("records/Observation.ndjson")), 0o600);
+        assert_eq!(mode(&v.root().join(".phv/tmp")), 0o700);
+    }
+
+    #[test]
+    fn existing_folders_keep_their_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("data");
+        fs::create_dir_all(root.join("records")).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(root.join("records"), fs::Permissions::from_mode(0o750)).unwrap();
+        Vault::init(&root).unwrap();
+        assert_eq!(mode(&root), 0o755);
+        assert_eq!(mode(&root.join("records")), 0o750);
+        assert_eq!(mode(&root.join("sources")), 0o700);
+    }
+}
+
+#[test]
+fn resource_types_skips_names_that_are_not_valid_types() {
+    let (_d, v) = vault();
+    v.apply(&[upsert("a", A)]).unwrap();
+    for name in ["a.b.ndjson", "bad name.ndjson", "x-y.ndjson", ".ndjson"] {
+        fs::write(v.root().join("records").join(name), "").unwrap();
+    }
+    assert_eq!(v.resource_types().unwrap(), ["Observation"]);
+}
+
+#[test]
+fn open_passes_through_io_errors_other_than_not_found() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("phv.toml")).unwrap();
+    let err = Vault::open(dir.path()).unwrap_err();
+    assert!(matches!(err, PhvError::Io(_)), "{err:?}");
+    let empty = tempfile::tempdir().unwrap();
+    let err = Vault::open(empty.path()).unwrap_err();
+    assert!(err.to_string().contains("no phv.toml"), "{err}");
+}
+
+#[test]
+fn an_empty_flag_or_env_counts_as_unset() {
+    let config = "default = \"maya\"\n[vaults]\nmaya = \"/from/config\"\n";
+    let r = |flag: Option<&str>, env: Option<&str>| {
+        resolve_vault_path(flag.map(Path::new), env, Some(config)).unwrap()
+    };
+    assert_eq!(r(Some(""), Some("")), Path::new("/from/config"));
+    assert_eq!(r(Some(""), Some("/e")), Path::new("/e"));
+    assert_eq!(r(None, Some("")), Path::new("/from/config"));
+    assert!(resolve_vault_path(Some(Path::new("")), Some(""), None).is_err());
+}

@@ -99,8 +99,9 @@ pub fn resolve_vault_path(
         .transpose()?
         .unwrap_or_default();
     let given = flag
+        .filter(|p| !p.as_os_str().is_empty())
         .map(Path::to_path_buf)
-        .or_else(|| env.map(PathBuf::from));
+        .or_else(|| env.filter(|e| !e.is_empty()).map(PathBuf::from));
     if let Some(given) = given {
         let named = given.to_str().and_then(|name| registry.vaults.get(name));
         return Ok(named.cloned().unwrap_or(given));
@@ -120,22 +121,120 @@ pub fn resolve_vault_path(
 /// The ID of a stored line, read from its fixed prefix without parsing the JSON.
 pub fn line_id(line: &str) -> Option<&str> {
     let rest = line.strip_prefix("{\"resourceType\":\"")?;
-    let (_, rest) = rest.split_once("\",\"id\":\"")?;
-    rest.split_once('"').map(|(id, _)| id)
+    // The ID must directly follow the type, so a nested "id" is never taken for the resource's.
+    let (_, rest) = rest.split_once('"')?;
+    let rest = rest.strip_prefix(",\"id\":\"")?;
+    let (id, _) = rest.split_once('"')?;
+    // An escaped ID is not a plain ID, so it is treated as unreadable.
+    if id.contains('\\') { None } else { Some(id) }
+}
+
+/// The text of the git config that applies to `dir`, following a `.git` file
+/// (worktree or submodule) to its git directory and its `commondir` if it has one.
+fn git_config_for(dir: &Path) -> Option<String> {
+    let dot_git = dir.join(".git");
+    let gitdir = if fs::metadata(&dot_git).ok()?.is_dir() {
+        dot_git
+    } else {
+        let text = fs::read_to_string(&dot_git).ok()?;
+        let target = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("gitdir:"))?
+            .trim();
+        // An absolute target replaces the base; a relative one is relative to `dir`.
+        dir.join(target)
+    };
+    let common = match fs::read_to_string(gitdir.join("commondir")) {
+        Ok(text) => gitdir.join(text.trim()),
+        Err(_) => gitdir,
+    };
+    fs::read_to_string(common.join("config")).ok()
+}
+
+/// True for a remote URL that names the public recodelabs/phv repo, in any common form.
+fn is_public_remote(value: &str) -> bool {
+    let url = value.trim().to_lowercase();
+    let url = url.strip_suffix('/').unwrap_or(&url);
+    let url = url.strip_suffix(".git").unwrap_or(url);
+    let url = url.strip_suffix('/').unwrap_or(url);
+    url == "recodelabs/phv"
+        || url
+            .strip_suffix("recodelabs/phv")
+            .is_some_and(|before| before.ends_with('/') || before.ends_with(':'))
 }
 
 fn is_public_code_repo(path: &Path) -> bool {
     for dir in path.ancestors() {
-        if let Ok(config) = fs::read_to_string(dir.join(".git/config")) {
+        if let Some(config) = git_config_for(dir) {
             // Match the exact repo, so a private repo such as recodelabs/phv-data is allowed.
             return config.lines().any(|line| {
                 let line = line.trim();
-                line.starts_with("url")
-                    && (line.ends_with("recodelabs/phv") || line.ends_with("recodelabs/phv.git"))
+                let Some(key) = line.get(..3).filter(|k| k.eq_ignore_ascii_case("url")) else {
+                    return false;
+                };
+                line[key.len()..]
+                    .trim_start()
+                    .strip_prefix('=')
+                    .is_some_and(is_public_remote)
             });
         }
     }
     false
+}
+
+/// Creates a directory and any missing parents. New folders are private (0700) on unix;
+/// folders that already exist are left as they are.
+fn create_private_dir(path: &Path) -> std::io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
+/// Makes a directory's entries (a new file, a rename, a removal) durable.
+fn sync_dir(dir: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        File::open(dir)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+        Ok(())
+    }
+}
+
+/// Keeps an existing `.gitignore` byte for byte and adds `.phv/` only when it is missing.
+fn ensure_gitignore(root: &Path) -> std::io::Result<()> {
+    let path = root.join(".gitignore");
+    match fs::read(&path) {
+        Ok(existing) => {
+            let listed = existing.split(|b| *b == b'\n').any(|line| {
+                matches!(
+                    line.strip_suffix(b"\r").unwrap_or(line),
+                    b".phv/" | b"/.phv/"
+                )
+            });
+            if listed {
+                return Ok(());
+            }
+            let mut addition = Vec::new();
+            if !existing.is_empty() && !existing.ends_with(b"\n") {
+                addition.push(b'\n');
+            }
+            addition.extend_from_slice(b".phv/\n");
+            OpenOptions::new()
+                .append(true)
+                .open(&path)?
+                .write_all(&addition)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => fs::write(&path, ".phv/\n"),
+        Err(e) => Err(e),
+    }
 }
 
 fn check_type_name(resource_type: &str) -> Result<(), PhvError> {
@@ -167,23 +266,28 @@ impl Vault {
                 root.display()
             )));
         }
-        fs::create_dir_all(root.join("records"))?;
-        fs::create_dir_all(root.join("sources"))?;
+        create_private_dir(&root.join("records"))?;
+        create_private_dir(&root.join("sources"))?;
+        create_private_dir(&root.join(".phv"))?;
         fs::write(
             root.join("phv.toml"),
             format!("format_version = {FORMAT_VERSION}\nfhir_version = \"4.0.1\"\n"),
         )?;
-        fs::write(root.join(".gitignore"), ".phv/\n")?;
+        ensure_gitignore(&root)?;
         Ok(Vault { root })
     }
 
     pub fn open(path: &Path) -> Result<Vault, PhvError> {
         let root = std::path::absolute(path)?;
-        let text = fs::read_to_string(root.join("phv.toml")).map_err(|_| {
-            PhvError::Usage(format!(
-                "{} is not a phv vault: no phv.toml",
-                root.display()
-            ))
+        let text = fs::read_to_string(root.join("phv.toml")).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                PhvError::Usage(format!(
+                    "{} is not a phv vault: no phv.toml",
+                    root.display()
+                ))
+            } else {
+                PhvError::Io(e)
+            }
         })?;
         let config: VaultConfig =
             toml::from_str(&text).map_err(|e| PhvError::Usage(format!("invalid phv.toml: {e}")))?;
@@ -202,7 +306,7 @@ impl Vault {
 
     /// Holds an exclusive advisory lock until the returned file is dropped.
     pub fn lock(&self) -> Result<File, PhvError> {
-        fs::create_dir_all(self.root.join(".phv"))?;
+        create_private_dir(&self.root.join(".phv"))?;
         let file = OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -225,14 +329,34 @@ impl Vault {
         let mut types = Vec::new();
         for entry in fs::read_dir(self.root.join("records"))? {
             let path = entry?.path();
-            if path.extension().is_some_and(|e| e == "ndjson") {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    types.push(stem.to_string());
-                }
+            if path.extension().is_some_and(|e| e == "ndjson")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+                && check_type_name(stem).is_ok()
+            {
+                types.push(stem.to_string());
             }
         }
         types.sort();
         Ok(types)
+    }
+
+    /// Refuses a file with carriage returns or without a final newline, because a rewrite
+    /// would change the bytes of lines it should only copy. A missing file is fine.
+    pub fn check_line_endings(&self, resource_type: &str) -> Result<(), PhvError> {
+        let path = self.file_for(resource_type)?;
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e.into()),
+        };
+        if bytes.contains(&b'\r') || (!bytes.is_empty() && !bytes.ends_with(b"\n")) {
+            return Err(PhvError::Conflict(vec![Issue::error(
+                "PHV-NEWLINE",
+                format!("records/{resource_type}.ndjson"),
+                "file has carriage returns or no final newline, so phv will not rewrite it: fix the line endings",
+            )]));
+        }
+        Ok(())
     }
 
     /// The raw lines for one resource type.
@@ -253,20 +377,28 @@ impl Vault {
             .find(|l| line_id(l) == Some(id)))
     }
 
-    /// Writes bytes through a temporary file in the target's directory, then renames it.
+    /// Writes bytes through a temporary file in `.phv/tmp` (same filesystem, never committed),
+    /// then renames it over the target and syncs the target's directory.
     pub fn write_atomic(&self, target: &Path, bytes: &[u8]) -> Result<(), PhvError> {
         let dir = target
             .parent()
             .ok_or_else(|| PhvError::Usage("target has no parent".into()))?;
-        let mut temp = tempfile::NamedTempFile::new_in(dir)?;
+        let tmp_dir = self.root.join(".phv/tmp");
+        create_private_dir(&tmp_dir)?;
+        let mut temp = tempfile::NamedTempFile::new_in(tmp_dir)?;
         temp.write_all(bytes)?;
         temp.as_file().sync_all()?;
         temp.persist(target).map_err(|e| PhvError::Io(e.error))?;
+        sync_dir(dir)?;
         Ok(())
     }
 
     /// Applies changes file by file. Files whose content would not change are not written.
     pub fn apply(&self, changes: &[Change]) -> Result<(), PhvError> {
+        // The caller must hand over consistent changes, so a mismatch is a programming error.
+        for change in changes {
+            validate_change(change)?;
+        }
         let mut by_type: BTreeMap<&str, Vec<&Change>> = BTreeMap::new();
         for change in changes {
             let (Change::Upsert { resource_type, .. } | Change::Remove { resource_type, .. }) =
@@ -276,6 +408,7 @@ impl Vault {
         let mut pending = Vec::new();
         // Check every file before writing any of them.
         for (resource_type, changes) in by_type {
+            self.check_line_endings(resource_type)?;
             let original = self.lines(resource_type)?;
             ensure_sorted(resource_type, &original)?;
             let mut lines = original.clone();
@@ -288,7 +421,10 @@ impl Vault {
         }
         for (path, lines) in pending {
             if lines.is_empty() {
-                fs::remove_file(path)?;
+                fs::remove_file(&path)?;
+                if let Some(dir) = path.parent() {
+                    sync_dir(dir)?;
+                }
             } else {
                 let mut text = lines.join("\n");
                 text.push('\n');
@@ -296,6 +432,36 @@ impl Vault {
             }
         }
         Ok(())
+    }
+}
+
+fn validate_change(change: &Change) -> Result<(), PhvError> {
+    let bad = |why: String| Err(PhvError::Usage(format!("invalid change: {why}")));
+    match change {
+        Change::Remove { resource_type, .. } => check_type_name(resource_type),
+        Change::Upsert {
+            resource_type,
+            id,
+            line,
+        } => {
+            check_type_name(resource_type)?;
+            if line.contains(['\n', '\r']) {
+                return bad(format!(
+                    "the line for {resource_type}/{id} has a line break"
+                ));
+            }
+            if !line.starts_with(&format!("{{\"resourceType\":\"{resource_type}\",")) {
+                return bad(format!(
+                    "the line for {resource_type}/{id} does not start with its resourceType"
+                ));
+            }
+            if line_id(line) != Some(id.as_str()) {
+                return bad(format!(
+                    "the line for {resource_type}/{id} has a different or unreadable id"
+                ));
+            }
+            Ok(())
+        }
     }
 }
 
