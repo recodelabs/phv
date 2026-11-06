@@ -1,5 +1,7 @@
+pub mod api;
 pub mod canon;
 pub mod check;
+pub mod cli;
 pub mod error;
 pub mod import;
 pub mod read;

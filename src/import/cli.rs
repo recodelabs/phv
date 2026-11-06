@@ -2,7 +2,7 @@
 
 use super::apple_activity::{ImportOptions, ImportReport};
 use crate::error::PhvError;
-use crate::store::{Vault, resolve_vault_path};
+use crate::store::Vault;
 use crate::write::Phv;
 use clap::Subcommand;
 use std::path::{Path, PathBuf};
@@ -23,15 +23,7 @@ pub enum ImportCommand {
 }
 
 fn open_vault(flag: Option<&Path>) -> Result<Vault, PhvError> {
-    let config = std::env::var_os("HOME")
-        .map(|home| PathBuf::from(home).join(".config/phv/config.toml"))
-        .and_then(|path| std::fs::read_to_string(path).ok());
-    let env = std::env::var("PHV_VAULT").ok();
-    Vault::open(&resolve_vault_path(
-        flag,
-        env.as_deref(),
-        config.as_deref(),
-    )?)
+    Vault::open(&crate::cli::vault_path(flag)?)
 }
 
 pub async fn run(
