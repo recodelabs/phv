@@ -32,6 +32,8 @@ phv --vault maya list Patient  # use a specific vault
 
 With Git, review changes with `git diff` and commit the ones you accept. Without Git, there is no history, so `phv replace` and `phv rm` cannot be undone.
 
+To try phv with fake data, see [demo/README.md](demo/README.md).
+
 ## Add a lab result with Claude
 
 Install the skill, then ask Claude Code to add a lab report:

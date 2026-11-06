@@ -1,0 +1,24 @@
+# Demo data
+
+**Everything in this folder is fake.** It exists for demos and testing. Never put real health data here, because this repo is public. Keep real records in a private vault.
+
+| Path | What it is |
+|---|---|
+| `patient-fhir-bundle.json` | A fake patient, Maria Rodriguez, with 22 FHIR R4 records |
+| `claims-835/` | 18 fake insurance claim payment files in X12 835 format |
+| `lab-2025-02-10/` | A draft mapping of a lab report, with its review table |
+
+## Try it
+
+```bash
+phv setup    # name it maria, and press Enter past the person's details
+phv --vault maria add demo/patient-fhir-bundle.json
+for f in demo/claims-835/*.edi; do phv --vault maria source add "$f"; done
+phv --vault maria check
+```
+
+Skip the person's details in `phv setup`, because the Bundle brings its own `Patient` and a vault holds only one.
+
+phv can't turn the claim files into records yet, so they are stored as original documents. The lab draft has its own placeholder `Patient`, so try it in a separate vault.
+
+`tests/demo.rs` checks that this data keeps importing cleanly.
