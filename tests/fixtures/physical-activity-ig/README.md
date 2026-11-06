@@ -1,0 +1,1 @@
+Snapshots of three profiles from `hl7.fhir.us.physical-activity#1.0.1`, published by HL7 under CC0. Narrative text is removed, along with descriptive element fields such as `definition` and `comment`. `tests/apple_activity_ig.rs` validates importer output against them.

@@ -1,6 +1,7 @@
 pub mod canon;
 pub mod check;
 pub mod error;
+pub mod import;
 pub mod read;
 pub mod refs;
 pub mod source;

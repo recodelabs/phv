@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 axum = "0.8"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }
 humantime = "2"
 octofhir-fhirpath = { version = "=0.5.8", default-features = false }
