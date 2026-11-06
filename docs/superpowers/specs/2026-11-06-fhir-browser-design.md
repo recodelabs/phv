@@ -78,7 +78,7 @@ All routes are GET.
 | `/v/{vault}/labs/reports/{id}` | One report with its results |
 | `/v/{vault}/labs/tests/{test}` | History of one test |
 | `/v/{vault}/conditions`, `medicines`, `allergies`, `vaccines` | One list each |
-| `/v/{vault}/activity?year=&month=&type=` | Steps and workouts |
+| `/v/{vault}/activity?year=&month=&type=&unit=` | Steps and workouts |
 | `/v/{vault}/documents?category=` | Catalog of original files |
 | `/v/{vault}/sources/{sha256}` | The original file |
 | `/v/{vault}/fhir` | Resource types with counts |
@@ -153,9 +153,20 @@ The Activity page shows steps and workouts imported by `phv import apple-activit
 
 **Records:** Observations with category `activity`. Steps have LOINC `41950-7`. A workout is a panel with code `PAPanel`, whose `hasMember` records hold its type, duration, calories and distance.
 
-**Drill-down:** All years, then one year's months, then one month's days. Query parameters are `year` and `month`, and a value that is not a real year and month is a 404. Each level has total steps, the average per recorded day, days recorded, a chart and a table.
+**Filters:** one row at the top of the page scopes everything below it, and stays visible while scrolling on wider screens. It is a plain GET form with Year, Month and Activity menus, plus km and mi links.
 
-**Workouts:** distance by activity for the period, largest first, with workout count and time. Activities with no distance stay in the table. Choosing an activity through `type` filters the workout list and, except at the month level, adds a chart of that activity's distance over the period. The list shows the newest 100, and a note says to pick a period for the rest.
+- With JavaScript, a change applies straight away. Without it, an Apply button does the same.
+- Query parameters are `year`, `month`, `type` and `unit`. A year or month that is not real is a 404, and an unknown unit is ignored.
+- Choices with no data stay listed but cannot be chosen, so menus do not jump around. The activity menu shows each one's count for the period. Month waits until a year is chosen.
+- Previous and next links step to the nearest period at the same level that has data.
+- Every link keeps the other filters: clicking a bar zooms in, and stepping to another period keeps the activity.
+- Clear removes every filter.
+
+**With no activity chosen:** steps for the period (total, average per recorded day, days recorded, a chart and a table), distance by activity with workout count and time, and the workout list. Activities with no distance stay in the table. A period with no steps says so rather than listing gaps.
+
+**With an activity chosen:** the page is about that activity, so steps leave. It shows workouts, distance, time and calories, then a chart of distance over the period, or of time for an activity with no distance, then the workout list. The list shows the newest 100, and a note says to pick a period for the rest.
+
+**Units:** distances show in kilometers or miles (1 mi = 1,609.344 m). Kilometers are the default. A `phv_unit` cookie remembers the choice, with `SameSite=Strict` and `HttpOnly`. This is the only thing the browser remembers, and it is about display, so nothing is written to the vault.
 
 **Limit on distance:** distances come only from recorded workouts, because the importer stores daily steps but no daily distance. The page says so, because "Walking" does not mean all walking.
 
@@ -163,7 +174,7 @@ The Activity page shows steps and workouts imported by `phv import apple-activit
 
 - **Gaps:** a day with no record means no data. It is not zero, so it does not lower the average, and it leaves a gap in the chart.
 - **Dates:** grouped by the date as written, with no time zone conversion.
-- **Friendly units:** duration shows as `1 h 12 min`, distance as `5.20 km` and calories as whole `kcal`. This applies only when the stored UCUM code is the expected `min`, `m` or `kcal`. Any other unit shows as stored and is left out of totals. This is the one exception to units never being converted.
+- **Friendly units:** duration shows as `1 h 12 min`, distance as `5.20 km` or `3.23 mi` and calories as whole `kcal`. This applies only when the stored UCUM code is the expected `min`, `m` or `kcal`. Any other unit shows as stored and is left out of totals. This is the one exception to units never being converted.
 - **Duplicate days:** if a date has two step records, the larger is used and a notice appears, so a second source cannot double count.
 - **Unusable records:** a step record with no usable date or whole-number count is left out and counted in a notice, not guessed at.
 - **Entered in error:** left out of totals, like other topics.

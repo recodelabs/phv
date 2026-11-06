@@ -13,7 +13,7 @@ function columnChart(table, all, rows, width) {
       domain,
       tickFormat: (d, i) => (domain.length > 16 && i % 5 ? "" : d),
     },
-    y: { grid: true, label: unit === "km" ? "Distance (km)" : "Steps", tickFormat: "s" },
+    y: { grid: true, label: table.dataset.axis, tickFormat: "s" },
     marks: [
       Plot.barY(rows, {
         x: "label",
@@ -35,6 +35,7 @@ function columnChart(table, all, rows, width) {
 }
 
 function barChart(table, all, rows) {
+  const unit = table.dataset.unit;
   const domain = rows
     .slice()
     .sort((a, b) => b.value - a.value)
@@ -44,7 +45,7 @@ function barChart(table, all, rows) {
     marginLeft: 96,
     marginRight: 84,
     y: { label: null, domain },
-    x: { grid: true, label: "Distance (km)" },
+    x: { grid: true, label: table.dataset.axis },
     marks: [
       Plot.barX(rows, {
         y: "label",
@@ -60,7 +61,7 @@ function barChart(table, all, rows) {
       Plot.text(rows, {
         y: "label",
         x: "value",
-        text: (r) => `${number(r.value)} km`,
+        text: (r) => `${number(r.value)} ${unit}`,
         textAnchor: "start",
         dx: 6,
       }),
@@ -69,7 +70,31 @@ function barChart(table, all, rows) {
   };
 }
 
-const charts = { steps: columnChart, "distance-time": columnChart, "distance-type": barChart };
+const charts = {
+  steps: columnChart,
+  "distance-time": columnChart,
+  "activity-time": columnChart,
+  "distance-type": barChart,
+};
+
+// Choosing a filter applies it straight away, and empty filters stay out of the URL.
+const form = document.querySelector("form.filters");
+if (form) {
+  form.classList.add("auto");
+  form.addEventListener("change", () => {
+    for (const select of form.querySelectorAll("select")) {
+      if (select.value === "") select.disabled = true;
+    }
+    form.requestSubmit();
+  });
+  // The browser may restore this page from its back cache with those filters still disabled.
+  window.addEventListener("pageshow", () => {
+    const year = form.querySelector('select[name="year"]');
+    for (const select of form.querySelectorAll("select")) {
+      select.disabled = select.name === "month" && year.value === "";
+    }
+  });
+}
 
 for (const table of document.querySelectorAll("table[data-chart]")) {
   const all = [...table.querySelectorAll("tr[data-x]")].map((row) => ({

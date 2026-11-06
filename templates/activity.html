@@ -10,8 +10,34 @@
 {% if empty %}
 <p>No activity yet.</p>
 {% else %}
-<p class="crumbs">
-  {% for crumb in &crumbs %}{% if let Some(query) = &crumb.query %}<a href="/v/{{ chrome.vault }}/activity{% if !query.is_empty() %}?{{ query }}{% endif %}">{{ crumb.label }}</a> › {% else %}{{ crumb.label }}{% endif %}{% endfor %}
+<div class="filter-bar">
+  <form class="filters" method="get" action="/v/{{ chrome.vault }}/activity">
+    <label>Year
+      <select name="year">
+        {% for o in &filters.years %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}{% if !o.enabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Month
+      <select name="month"{% if !filters.month_enabled %} disabled{% endif %}>
+        {% for o in &filters.months %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}{% if !o.enabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Activity
+      <select name="type">
+        {% for o in &filters.activities %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}{% if !o.enabled %} disabled{% endif %}>{{ o.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="apply">Apply</button>
+    {% if filters.any_filter %}<a class="clear" href="/v/{{ chrome.vault }}/activity">Clear</a>{% endif %}
+  </form>
+  <div class="units" role="group" aria-label="Distance units">
+    {% for u in &filters.units %}<a href="/v/{{ chrome.vault }}/activity?{{ u.query }}"{% if u.on %} aria-current="true"{% endif %}>{{ u.label }}</a>{% endfor %}
+  </div>
+</div>
+<p class="period">
+  {% if let Some(step) = &filters.previous %}<a href="/v/{{ chrome.vault }}/activity?{{ step.query }}">‹ {{ step.label }}</a>{% endif %}
+  <b>{{ title }}{% if let Some(activity) = &selected %} · {{ activity }}{% endif %}</b>
+  {% if let Some(step) = &filters.next %}<a href="/v/{{ chrome.vault }}/activity?{{ step.query }}">{{ step.label }} ›</a>{% endif %}
 </p>
 {% if unusable > 0 %}
 <p class="notice">{{ unusable }} step records have no usable date or count, so they aren't included.</p>
@@ -19,17 +45,43 @@
 {% if duplicate_days > 0 %}
 <p class="notice">{{ duplicate_days }} days have more than one step record. The largest is used for each.</p>
 {% endif %}
+
+{% if let Some(activity) = &selected %}
 <div class="tiles">
-  <div class="tile"><b>{{ summary.total }}</b><span>Total steps · {{ title }}</span></div>
+  <div class="tile"><b>{{ totals.workouts }}</b><span>Workouts</span></div>
+  {% if let Some(distance) = &totals.distance %}<div class="tile"><b>{{ distance }}</b><span>Distance</span></div>{% endif %}
+  <div class="tile"><b>{{ totals.time }}</b><span>Time</span></div>
+  {% if let Some(calories) = &totals.calories %}<div class="tile"><b>{{ calories }}</b><span>Calories</span></div>{% endif %}
+</div>
+{% if !over_time.is_empty() %}
+<h2>{{ activity }} {% if over_time_is_distance %}distance{% else %}time{% endif %} by {{ level|lower }}</h2>
+{% if has_next_level %}<p class="sub">Click a bar to zoom in.</p>{% endif %}
+<details class="table-view" open>
+  <summary>Table</summary>
+  <table data-chart="{% if over_time_is_distance %}distance-time{% else %}activity-time{% endif %}" data-unit="{% if over_time_is_distance %}{{ unit }}{% else %}min{% endif %}" data-axis="{% if over_time_is_distance %}Distance ({{ unit }}){% else %}Time (min){% endif %}">
+    <tr><th>{{ level }}</th><th class="num">{% if over_time_is_distance %}Distance{% else %}Time{% endif %}</th></tr>
+    {% for b in &over_time %}
+    <tr data-x="{{ b.label }}"{% if let Some(value) = &b.value %} data-y="{{ value }}"{% endif %} data-title="{{ b.title }}">
+      <td>{% if let Some(query) = &b.query %}<a href="/v/{{ chrome.vault }}/activity?{{ query }}">{{ b.label }}</a>{% else %}{{ b.label }}{% endif %}</td>
+      <td class="num{% if b.value.is_none() %} muted{% endif %}">{{ b.text }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
+{% endif %}
+{% else %}
+<h2>Steps</h2>
+{% if has_steps %}
+<div class="tiles">
+  <div class="tile"><b>{{ summary.total }}</b><span>Total steps</span></div>
   <div class="tile"><b>{{ summary.average }}</b><span>Average per recorded day</span></div>
   <div class="tile"><b>{{ summary.days }}</b><span>Days recorded</span></div>
 </div>
-
-<h2>Steps · {{ title }}</h2>
+{% if has_next_level %}<p class="sub">Click a bar to zoom in.</p>{% endif %}
 <details class="table-view" open>
   <summary>Table</summary>
-  <table data-chart="steps" data-unit="steps">
-    <tr><th>{{ step_heading }}</th><th class="num">Steps</th></tr>
+  <table data-chart="steps" data-unit="steps" data-axis="Steps">
+    <tr><th>{{ level }}</th><th class="num">Steps</th></tr>
     {% for b in &steps %}
     <tr data-x="{{ b.label }}"{% if let Some(value) = &b.value %} data-y="{{ value }}"{% endif %} data-title="{{ b.title }}">
       <td>{% if let Some(query) = &b.query %}<a href="/v/{{ chrome.vault }}/activity?{{ query }}">{{ b.label }}</a>{% else %}{{ b.label }}{% endif %}</td>
@@ -38,17 +90,20 @@
     {% endfor %}
   </table>
 </details>
+{% else %}
+<p>No steps recorded in {{ title }}.</p>
+{% endif %}
 
 {% if !types.is_empty() %}
-<h2>Distance by activity · {{ title }}</h2>
+<h2>Distance by activity</h2>
 <p class="sub">Distances come from recorded workouts, so everyday walking outside a workout counts toward steps only.</p>
 <details class="table-view" open>
   <summary>Table</summary>
-  <table data-chart="distance-type">
+  <table{% if any_distance %} data-chart="distance-type" data-unit="{{ unit }}" data-axis="Distance ({{ unit }})"{% endif %}>
     <tr><th>Activity</th><th class="num">Workouts</th><th class="num">Distance</th><th class="num">Time</th></tr>
     {% for t in &types %}
-    <tr{% if let Some(km) = &t.chart_km %} data-x="{{ t.name }}" data-y="{{ km }}" data-title="{{ t.name }}"{% endif %}>
-      <td><a href="/v/{{ chrome.vault }}/activity?{{ type_query }}type={{ t.name_url }}">{{ t.name }}</a></td>
+    <tr{% if let Some(distance) = &t.chart_distance %} data-x="{{ t.name }}" data-y="{{ distance }}" data-title="{{ t.name }}"{% endif %}>
+      <td>{{ t.name }}</td>
       <td class="num">{{ t.count }}</td>
       <td class="num">{% if let Some(distance) = &t.distance %}{{ distance }}{% else %}<span class="muted">No distance</span>{% endif %}</td>
       <td class="num">{{ t.time }}</td>
@@ -57,33 +112,11 @@
   </table>
 </details>
 {% endif %}
-
-{% if !over_time.is_empty() %}
-<h2>{% if let Some(activity) = &selected %}{{ activity }}{% endif %} distance · {{ title }}</h2>
-<details class="table-view" open>
-  <summary>Table</summary>
-  <table data-chart="distance-time" data-unit="km">
-    <tr><th>{{ over_time_heading }}</th><th class="num">Distance</th></tr>
-    {% for b in &over_time %}
-    <tr data-x="{{ b.label }}"{% if let Some(value) = &b.value %} data-y="{{ value }}"{% endif %} data-title="{{ b.title }}">
-      <td>{{ b.label }}</td>
-      <td class="num{% if b.value.is_none() %} muted{% endif %}">{{ b.text }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-</details>
 {% endif %}
 
-<h2>Workouts · {{ title }}{% if let Some(activity) = &selected %} · {{ activity }}{% endif %}</h2>
-{% if chips.len() > 1 %}
-<div class="chips">
-  {% for chip in &chips %}
-  <a class="chip" href="/v/{{ chrome.vault }}/activity{% if !chip.query.is_empty() %}?{{ chip.query }}{% endif %}"{% if chip.on %} aria-current="true"{% endif %}>{{ chip.label }} {{ chip.count }}</a>
-  {% endfor %}
-</div>
-{% endif %}
+<h2>Workouts</h2>
 {% if workouts.is_empty() %}
-<p>No workouts in this period.</p>
+<p>No workouts in {{ title }}.</p>
 {% else %}
 <table>
   <tr><th>Date</th><th>Workout</th><th>Duration</th><th>Distance</th><th>Calories</th></tr>
