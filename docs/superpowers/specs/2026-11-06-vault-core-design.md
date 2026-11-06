@@ -178,6 +178,7 @@ Default features are disabled on both octofhir crates, keeping HTTP clients out 
 
 `phv source add FILE` copies the file to `sources/<sha256>.<ext>` and creates a `DocumentReference`:
 
+- `id`: the first 32 hex characters of the file's SHA-256, so the same file always maps to the same record.
 - `identifier`: system `urn:phv:sha256`, value is the file's SHA-256.
 - `status`: `current`.
 - `content[0].attachment`: `contentType` from the extension, and `url` set to the relative path.
