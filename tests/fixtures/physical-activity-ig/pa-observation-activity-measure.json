@@ -1,0 +1,2637 @@
+{
+ "abstract": false,
+ "baseDefinition": "http://hl7.org/fhir/us/physical-activity/StructureDefinition/pa-observation-base",
+ "derivation": "constraint",
+ "fhirVersion": "4.0.1",
+ "kind": "resource",
+ "name": "PAObservationActivityMeasure",
+ "resourceType": "StructureDefinition",
+ "snapshot": {
+  "element": [
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation"
+    },
+    "constraint": [
+     {
+      "expression": "contained.contained.empty()",
+      "human": "If the resource is contained in another resource, it SHALL NOT contain nested Resources",
+      "key": "dom-2",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/DomainResource",
+      "xpath": "not(parent::f:contained and f:contained)"
+     },
+     {
+      "expression": "contained.where((('#'+id in (%resource.descendants().reference | %resource.descendants().as(canonical) | %resource.descendants().as(uri) | %resource.descendants().as(url))) or descendants().where(reference = '#').exists() or descendants().where(as(canonical) = '#').exists() or descendants().where(as(canonical) = '#').exists()).not()).trace('unmatched', id).empty()",
+      "human": "If the resource is contained in another resource, it SHALL be referred to from elsewhere in the resource or SHALL refer to the containing resource",
+      "key": "dom-3",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/DomainResource",
+      "xpath": "not(exists(for $id in f:contained/*/f:id/@value return $contained[not(parent::*/descendant::f:reference/@value=concat('#', $contained/*/id/@value) or descendant::f:reference[@value='#'])]))"
+     },
+     {
+      "expression": "contained.meta.versionId.empty() and contained.meta.lastUpdated.empty()",
+      "human": "If a resource is contained in another resource, it SHALL NOT have a meta.versionId or a meta.lastUpdated",
+      "key": "dom-4",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/DomainResource",
+      "xpath": "not(exists(f:contained/*/f:meta/f:versionId)) and not(exists(f:contained/*/f:meta/f:lastUpdated))"
+     },
+     {
+      "expression": "contained.meta.security.empty()",
+      "human": "If a resource is contained in another resource, it SHALL NOT have a security label",
+      "key": "dom-5",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/DomainResource",
+      "xpath": "not(exists(f:contained/*/f:meta/f:security))"
+     },
+     {
+      "expression": "text.`div`.exists()",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bestpractice",
+        "valueBoolean": true
+       },
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bestpractice-explanation",
+        "valueMarkdown": "When a resource has no narrative, only systems that fully understand the data can display the resource to a human safely. Including a human readable representation in the resource makes for a much more robust eco-system and cheaper handling of resources by intermediary systems. Some ecosystems restrict distribution of resources to only those systems that do fully understand the resources, and as a consequence implementers may believe that the narrative is superfluous. However experience shows that such eco-systems often open up to new participants over time."
+       }
+      ],
+      "human": "A resource should have narrative for robust management",
+      "key": "dom-6",
+      "severity": "warning",
+      "source": "http://hl7.org/fhir/StructureDefinition/DomainResource",
+      "xpath": "exists(f:text/h:div)"
+     },
+     {
+      "expression": "dataAbsentReason.empty() or value.empty()",
+      "human": "dataAbsentReason SHALL only be present if Observation.value[x] is not present",
+      "key": "obs-6",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Observation",
+      "xpath": "not(exists(f:dataAbsentReason)) or (not(exists(*[starts-with(local-name(.), 'value')])))"
+     },
+     {
+      "expression": "value.empty() or component.code.where(coding.intersect(%resource.code.coding).exists()).empty()",
+      "human": "If Observation.code is the same as an Observation.component.code then the value element associated with the code SHALL NOT be present",
+      "key": "obs-7",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Observation",
+      "xpath": "not(f:*[starts-with(local-name(.), 'value')] and (for $coding in f:code/f:coding return f:component/f:code/f:coding[f:code/@value=$coding/f:code/@value] [f:system/@value=$coding/f:system/@value]))"
+     }
+    ],
+    "id": "Observation",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation"
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Resource.id"
+    },
+    "id": "Observation.id",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.id",
+    "type": [
+     {
+      "code": "http://hl7.org/fhirpath/System.String",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type",
+        "valueUrl": "id"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Resource.meta"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.meta",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.meta",
+    "type": [
+     {
+      "code": "Meta"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Resource.implicitRules"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.implicitRules",
+    "isModifier": true,
+    "isSummary": true,
+    "max": "0",
+    "min": 0,
+    "path": "Observation.implicitRules",
+    "type": [
+     {
+      "code": "uri"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Resource.language"
+    },
+    "binding": {
+     "description": "A human language.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-maxValueSet",
+       "valueCanonical": "http://hl7.org/fhir/ValueSet/all-languages"
+      },
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "Language"
+      }
+     ],
+     "strength": "preferred",
+     "valueSet": "http://hl7.org/fhir/ValueSet/languages"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.language",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.language",
+    "type": [
+     {
+      "code": "code"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "DomainResource.text"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.text",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.text",
+    "type": [
+     {
+      "code": "Narrative"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "DomainResource.contained"
+    },
+    "id": "Observation.contained",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.contained",
+    "type": [
+     {
+      "code": "Resource"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "DomainResource.extension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.extension",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.extension",
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "DomainResource.modifierExtension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.modifierExtension",
+    "isModifier": true,
+    "isSummary": false,
+    "max": "0",
+    "min": 0,
+    "path": "Observation.modifierExtension",
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.identifier"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.identifier",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.identifier",
+    "type": [
+     {
+      "code": "Identifier"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.basedOn"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.basedOn",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.basedOn",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/CarePlan",
+       "http://hl7.org/fhir/StructureDefinition/DeviceRequest",
+       "http://hl7.org/fhir/StructureDefinition/ImmunizationRecommendation",
+       "http://hl7.org/fhir/StructureDefinition/MedicationRequest",
+       "http://hl7.org/fhir/StructureDefinition/NutritionOrder",
+       "http://hl7.org/fhir/StructureDefinition/ServiceRequest"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.partOf"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.partOf",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.partOf",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/MedicationAdministration",
+       "http://hl7.org/fhir/StructureDefinition/MedicationDispense",
+       "http://hl7.org/fhir/StructureDefinition/MedicationStatement",
+       "http://hl7.org/fhir/StructureDefinition/Procedure",
+       "http://hl7.org/fhir/StructureDefinition/Immunization",
+       "http://hl7.org/fhir/StructureDefinition/ImagingStudy"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 1,
+     "path": "Observation.status"
+    },
+    "binding": {
+     "strength": "required",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-status"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "extension": [
+     {
+      "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-display-hint",
+      "valueString": "default: final"
+     }
+    ],
+    "id": "Observation.status",
+    "isModifier": true,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.status",
+    "type": [
+     {
+      "code": "code"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.category"
+    },
+    "binding": {
+     "description": "Codes for high level observation categories.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationCategory"
+      }
+     ],
+     "strength": "preferred",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-category"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.category",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 2,
+    "path": "Observation.category",
+    "slicing": {
+     "discriminator": [
+      {
+       "path": "$this",
+       "type": "pattern"
+      }
+     ],
+     "rules": "open"
+    },
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.category"
+    },
+    "binding": {
+     "description": "Codes for high level observation categories.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationCategory"
+      }
+     ],
+     "strength": "preferred",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-category"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.category:Activity",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.category",
+    "patternCodeableConcept": {
+     "coding": [
+      {
+       "code": "activity",
+       "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+      }
+     ]
+    },
+    "sliceName": "Activity",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.category"
+    },
+    "binding": {
+     "description": "Codes for high level observation categories.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationCategory"
+      }
+     ],
+     "strength": "preferred",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-category"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.category:PhysicalActivity",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.category",
+    "patternCodeableConcept": {
+     "coding": [
+      {
+       "code": "PhysicalActivity",
+       "system": "http://hl7.org/fhir/us/physical-activity/CodeSystem/pa-temporary-codes"
+      }
+     ]
+    },
+    "sliceName": "PhysicalActivity",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 1,
+     "path": "Observation.code"
+    },
+    "binding": {
+     "strength": "extensible",
+     "valueSet": "http://hl7.org/fhir/us/physical-activity/ValueSet/pa-observation-code-activity"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.code",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.code",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.subject"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.subject",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.subject",
+    "type": [
+     {
+      "code": "Reference",
+      "profile": [
+       "http://hl7.org/fhir/us/physical-activity/StructureDefinition/reference-rest"
+      ],
+      "targetProfile": [
+       "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.focus"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.focus",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "0",
+    "min": 0,
+    "path": "Observation.focus",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/Resource"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.encounter"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.encounter",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.encounter",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/Encounter"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.effective[x]"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.effective[x]",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.effective[x]",
+    "slicing": {
+     "discriminator": [
+      {
+       "path": "$this",
+       "type": "type"
+      }
+     ],
+     "ordered": false,
+     "rules": "closed"
+    },
+    "type": [
+     {
+      "code": "dateTime",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-type-must-support",
+        "valueBoolean": true
+       }
+      ]
+     },
+     {
+      "code": "Period"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.effective[x]"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "extension": [
+     {
+      "url": "http://hl7.org/fhir/StructureDefinition/minLength",
+      "valueInteger": 10
+     }
+    ],
+    "id": "Observation.effective[x]:effectiveDateTime",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.effective[x]",
+    "sliceName": "effectiveDateTime",
+    "type": [
+     {
+      "code": "dateTime"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.effective[x]"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.effective[x]:effectivePeriod",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.effective[x]",
+    "sliceName": "effectivePeriod",
+    "type": [
+     {
+      "code": "Period"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Element.id"
+    },
+    "id": "Observation.effective[x]:effectivePeriod.id",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.effective[x].id",
+    "representation": [
+     "xmlAttr"
+    ],
+    "type": [
+     {
+      "code": "http://hl7.org/fhirpath/System.String",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type",
+        "valueUrl": "string"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Element.extension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.effective[x]:effectivePeriod.extension",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.effective[x].extension",
+    "slicing": {
+     "description": "Extensions are always sliced by (at least) url",
+     "discriminator": [
+      {
+       "path": "url",
+       "type": "value"
+      }
+     ],
+     "rules": "open"
+    },
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Period.start"
+    },
+    "condition": [
+     "per-1"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "extension": [
+     {
+      "url": "http://hl7.org/fhir/StructureDefinition/minLength",
+      "valueInteger": 10
+     }
+    ],
+    "id": "Observation.effective[x]:effectivePeriod.start",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.effective[x].start",
+    "type": [
+     {
+      "code": "dateTime"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Period.end"
+    },
+    "condition": [
+     "per-1"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "extension": [
+     {
+      "url": "http://hl7.org/fhir/StructureDefinition/minLength",
+      "valueInteger": 10
+     }
+    ],
+    "id": "Observation.effective[x]:effectivePeriod.end",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.effective[x].end",
+    "type": [
+     {
+      "code": "dateTime"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.issued"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.issued",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.issued",
+    "type": [
+     {
+      "code": "instant"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.performer"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.performer",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "mustSupport": true,
+    "path": "Observation.performer",
+    "type": [
+     {
+      "_targetProfile": [
+       {
+        "extension": [
+         {
+          "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-type-must-support",
+          "valueBoolean": true
+         }
+        ]
+       },
+       {
+        "extension": [
+         {
+          "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-type-must-support",
+          "valueBoolean": true
+         }
+        ]
+       },
+       null,
+       null
+      ],
+      "code": "Reference",
+      "profile": [
+       "http://hl7.org/fhir/us/physical-activity/StructureDefinition/reference-rest-or-logical"
+      ],
+      "targetProfile": [
+       "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
+       "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner",
+       "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitionerrole",
+       "http://hl7.org/fhir/StructureDefinition/RelatedPerson"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.value[x]"
+    },
+    "condition": [
+     "obs-7"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.value[x]",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "mustSupport": true,
+    "path": "Observation.value[x]",
+    "slicing": {
+     "discriminator": [
+      {
+       "path": "$this",
+       "type": "type"
+      }
+     ],
+     "ordered": false,
+     "rules": "closed"
+    },
+    "type": [
+     {
+      "code": "Quantity"
+     },
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.value[x]"
+    },
+    "condition": [
+     "obs-7"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.value[x]:valueCodeableConcept",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.value[x]",
+    "sliceName": "valueCodeableConcept",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.value[x]"
+    },
+    "condition": [
+     "ele-1"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "code.empty() or system.exists()",
+      "human": "If a code for the unit is present, the system SHALL also be present",
+      "key": "qty-3",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Quantity",
+      "xpath": "not(exists(f:code)) or exists(f:system)"
+     },
+     {
+      "expression": "comparator.empty()",
+      "human": "The comparator is not used on a SimpleQuantity",
+      "key": "sqty-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Observation",
+      "xpath": "not(exists(f:comparator))"
+     }
+    ],
+    "id": "Observation.value[x]:valueQuantity",
+    "isModifier": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.value[x]",
+    "sliceName": "valueQuantity",
+    "type": [
+     {
+      "code": "Quantity",
+      "profile": [
+       "http://hl7.org/fhir/StructureDefinition/SimpleQuantity"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Element.id"
+    },
+    "id": "Observation.value[x]:valueQuantity.id",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.value[x].id",
+    "representation": [
+     "xmlAttr"
+    ],
+    "type": [
+     {
+      "code": "http://hl7.org/fhirpath/System.String",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type",
+        "valueUrl": "string"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Element.extension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.value[x]:valueQuantity.extension",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.value[x].extension",
+    "slicing": {
+     "description": "Extensions are always sliced by (at least) url",
+     "discriminator": [
+      {
+       "path": "url",
+       "type": "value"
+      }
+     ],
+     "rules": "open"
+    },
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Quantity.value"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.value[x]:valueQuantity.value",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.value[x].value",
+    "type": [
+     {
+      "code": "decimal"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Quantity.comparator"
+    },
+    "binding": {
+     "description": "How the Quantity should be understood and represented.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "QuantityComparator"
+      }
+     ],
+     "strength": "required",
+     "valueSet": "http://hl7.org/fhir/ValueSet/quantity-comparator|4.0.1"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.value[x]:valueQuantity.comparator",
+    "isModifier": true,
+    "isSummary": true,
+    "max": "0",
+    "min": 0,
+    "path": "Observation.value[x].comparator",
+    "type": [
+     {
+      "code": "code"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Quantity.unit"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "extension": [
+     {
+      "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-translatable",
+      "valueBoolean": true
+     }
+    ],
+    "id": "Observation.value[x]:valueQuantity.unit",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.value[x].unit",
+    "type": [
+     {
+      "code": "string"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Quantity.system"
+    },
+    "condition": [
+     "qty-3"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.value[x]:valueQuantity.system",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "path": "Observation.value[x].system",
+    "patternUri": "http://unitsofmeasure.org",
+    "type": [
+     {
+      "code": "uri"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Quantity.code"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.value[x]:valueQuantity.code",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.value[x].code",
+    "type": [
+     {
+      "code": "code"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.dataAbsentReason"
+    },
+    "binding": {
+     "description": "Codes specifying why the result (`Observation.value[x]`) is missing.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationValueAbsentReason"
+      }
+     ],
+     "strength": "extensible",
+     "valueSet": "http://hl7.org/fhir/ValueSet/data-absent-reason"
+    },
+    "condition": [
+     "obs-6"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.dataAbsentReason",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.dataAbsentReason",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.interpretation"
+    },
+    "binding": {
+     "description": "Codes identifying interpretations of observations.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationInterpretation"
+      }
+     ],
+     "strength": "extensible",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-interpretation"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.interpretation",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.interpretation",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.note"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.note",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "mustSupport": true,
+    "path": "Observation.note",
+    "type": [
+     {
+      "code": "Annotation"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Element.id"
+    },
+    "id": "Observation.note.id",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.note.id",
+    "representation": [
+     "xmlAttr"
+    ],
+    "type": [
+     {
+      "code": "http://hl7.org/fhirpath/System.String",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type",
+        "valueUrl": "string"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Element.extension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.note.extension",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.note.extension",
+    "slicing": {
+     "description": "Extensions are always sliced by (at least) url",
+     "discriminator": [
+      {
+       "path": "url",
+       "type": "value"
+      }
+     ],
+     "rules": "open"
+    },
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Annotation.author[x]"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.note.author[x]",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.note.author[x]",
+    "type": [
+     {
+      "_targetProfile": [
+       {
+        "extension": [
+         {
+          "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-type-must-support",
+          "valueBoolean": true
+         }
+        ]
+       },
+       {
+        "extension": [
+         {
+          "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-type-must-support",
+          "valueBoolean": true
+         }
+        ]
+       },
+       null
+      ],
+      "code": "Reference",
+      "profile": [
+       "http://hl7.org/fhir/us/physical-activity/StructureDefinition/reference-rest-or-logical"
+      ],
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/Practitioner",
+       "http://hl7.org/fhir/StructureDefinition/Patient",
+       "http://hl7.org/fhir/StructureDefinition/RelatedPerson"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Annotation.time"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.note.time",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.note.time",
+    "type": [
+     {
+      "code": "dateTime"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 1,
+     "path": "Annotation.text"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.note.text",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "mustSupport": true,
+    "path": "Observation.note.text",
+    "type": [
+     {
+      "code": "markdown"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.bodySite"
+    },
+    "binding": {
+     "description": "Codes describing anatomical locations. May include laterality.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "BodySite"
+      }
+     ],
+     "strength": "example",
+     "valueSet": "http://hl7.org/fhir/ValueSet/body-site"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.bodySite",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.bodySite",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.method"
+    },
+    "binding": {
+     "description": "Methods for simple observations.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationMethod"
+      }
+     ],
+     "strength": "example",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-methods"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.method",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.method",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.specimen"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.specimen",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "0",
+    "min": 0,
+    "path": "Observation.specimen",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/Specimen"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.device"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.device",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.device",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/Device",
+       "http://hl7.org/fhir/StructureDefinition/DeviceMetric"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.referenceRange"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "low.exists() or high.exists() or text.exists()",
+      "human": "Must have at least a low or a high or text",
+      "key": "obs-3",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Observation",
+      "xpath": "(exists(f:low) or exists(f:high)or exists(f:text))"
+     }
+    ],
+    "id": "Observation.referenceRange",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.referenceRange",
+    "type": [
+     {
+      "code": "BackboneElement"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Element.id"
+    },
+    "id": "Observation.referenceRange.id",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.referenceRange.id",
+    "representation": [
+     "xmlAttr"
+    ],
+    "type": [
+     {
+      "code": "http://hl7.org/fhirpath/System.String",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type",
+        "valueUrl": "string"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Element.extension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.referenceRange.extension",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.referenceRange.extension",
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "BackboneElement.modifierExtension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.referenceRange.modifierExtension",
+    "isModifier": true,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.referenceRange.modifierExtension",
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.referenceRange.low"
+    },
+    "condition": [
+     "obs-3"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.referenceRange.low",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.referenceRange.low",
+    "type": [
+     {
+      "code": "Quantity",
+      "profile": [
+       "http://hl7.org/fhir/StructureDefinition/SimpleQuantity"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.referenceRange.high"
+    },
+    "condition": [
+     "obs-3"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.referenceRange.high",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.referenceRange.high",
+    "type": [
+     {
+      "code": "Quantity",
+      "profile": [
+       "http://hl7.org/fhir/StructureDefinition/SimpleQuantity"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.referenceRange.type"
+    },
+    "binding": {
+     "description": "Code for the meaning of a reference range.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationRangeMeaning"
+      }
+     ],
+     "strength": "preferred",
+     "valueSet": "http://hl7.org/fhir/ValueSet/referencerange-meaning"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.referenceRange.type",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.referenceRange.type",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.referenceRange.appliesTo"
+    },
+    "binding": {
+     "description": "Codes identifying the population the reference range applies to.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationRangeType"
+      }
+     ],
+     "strength": "example",
+     "valueSet": "http://hl7.org/fhir/ValueSet/referencerange-appliesto"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.referenceRange.appliesTo",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.referenceRange.appliesTo",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.referenceRange.age"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.referenceRange.age",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.referenceRange.age",
+    "type": [
+     {
+      "code": "Range"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.referenceRange.text"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.referenceRange.text",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.referenceRange.text",
+    "type": [
+     {
+      "code": "string"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.hasMember"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.hasMember",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.hasMember",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/Observation",
+       "http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse",
+       "http://hl7.org/fhir/StructureDefinition/MolecularSequence"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.derivedFrom"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.derivedFrom",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.derivedFrom",
+    "type": [
+     {
+      "code": "Reference",
+      "targetProfile": [
+       "http://hl7.org/fhir/StructureDefinition/DocumentReference",
+       "http://hl7.org/fhir/StructureDefinition/ImagingStudy",
+       "http://hl7.org/fhir/StructureDefinition/Media",
+       "http://hl7.org/fhir/StructureDefinition/QuestionnaireResponse",
+       "http://hl7.org/fhir/StructureDefinition/Observation",
+       "http://hl7.org/fhir/StructureDefinition/MolecularSequence"
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.component"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.component",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.component",
+    "type": [
+     {
+      "code": "BackboneElement"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Element.id"
+    },
+    "id": "Observation.component.id",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.component.id",
+    "representation": [
+     "xmlAttr"
+    ],
+    "type": [
+     {
+      "code": "http://hl7.org/fhirpath/System.String",
+      "extension": [
+       {
+        "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-fhir-type",
+        "valueUrl": "string"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Element.extension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.component.extension",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.component.extension",
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "BackboneElement.modifierExtension"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     },
+     {
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Extension",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+     }
+    ],
+    "id": "Observation.component.modifierExtension",
+    "isModifier": true,
+    "isSummary": true,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.component.modifierExtension",
+    "type": [
+     {
+      "code": "Extension"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 1,
+     "path": "Observation.component.code"
+    },
+    "binding": {
+     "description": "Codes identifying names of simple observations.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationCode"
+      }
+     ],
+     "strength": "example",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-codes"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.component.code",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 1,
+    "path": "Observation.component.code",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.component.value[x]"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.component.value[x]",
+    "isModifier": false,
+    "isSummary": true,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.component.value[x]",
+    "type": [
+     {
+      "code": "Quantity"
+     },
+     {
+      "code": "CodeableConcept"
+     },
+     {
+      "code": "string"
+     },
+     {
+      "code": "boolean"
+     },
+     {
+      "code": "integer"
+     },
+     {
+      "code": "Range"
+     },
+     {
+      "code": "Ratio"
+     },
+     {
+      "code": "SampledData"
+     },
+     {
+      "code": "time"
+     },
+     {
+      "code": "dateTime"
+     },
+     {
+      "code": "Period"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "1",
+     "min": 0,
+     "path": "Observation.component.dataAbsentReason"
+    },
+    "binding": {
+     "description": "Codes specifying why the result (`Observation.value[x]`) is missing.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationValueAbsentReason"
+      }
+     ],
+     "strength": "extensible",
+     "valueSet": "http://hl7.org/fhir/ValueSet/data-absent-reason"
+    },
+    "condition": [
+     "obs-6"
+    ],
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.component.dataAbsentReason",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "1",
+    "min": 0,
+    "path": "Observation.component.dataAbsentReason",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.component.interpretation"
+    },
+    "binding": {
+     "description": "Codes identifying interpretations of observations.",
+     "extension": [
+      {
+       "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+       "valueString": "ObservationInterpretation"
+      }
+     ],
+     "strength": "extensible",
+     "valueSet": "http://hl7.org/fhir/ValueSet/observation-interpretation"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "id": "Observation.component.interpretation",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.component.interpretation",
+    "type": [
+     {
+      "code": "CodeableConcept"
+     }
+    ]
+   },
+   {
+    "base": {
+     "max": "*",
+     "min": 0,
+     "path": "Observation.component.referenceRange"
+    },
+    "constraint": [
+     {
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "source": "http://hl7.org/fhir/StructureDefinition/Element",
+      "xpath": "@value|f:*|h:div"
+     }
+    ],
+    "contentReference": "http://hl7.org/fhir/StructureDefinition/Observation#Observation.referenceRange",
+    "id": "Observation.component.referenceRange",
+    "isModifier": false,
+    "isSummary": false,
+    "max": "*",
+    "min": 0,
+    "path": "Observation.component.referenceRange"
+   }
+  ]
+ },
+ "status": "active",
+ "type": "Observation",
+ "url": "http://hl7.org/fhir/us/physical-activity/StructureDefinition/pa-observation-activity-measure",
+ "version": "1.0.1"
+}

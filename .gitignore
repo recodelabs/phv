@@ -9,3 +9,7 @@
 /sources/
 /phv.toml
 /patient_files/
+
+# Local git worktrees
+/.worktrees/
+/.claude/worktrees/
