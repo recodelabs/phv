@@ -150,36 +150,6 @@ async fn list(
 }
 
 #[derive(Deserialize)]
-struct IpsQuery {
-    /// Return `{bundle, omitted, warnings}` rather than the Bundle alone.
-    #[serde(default)]
-    report: bool,
-}
-
-/// An IPS document for the vault. Records left out are counted in `x-phv-warning`.
-async fn ips(State(phv): State<AppState>, Query(q): Query<IpsQuery>) -> Result<Response, PhvError> {
-    let options = crate::ips::IpsOptions {
-        generated_at: humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string(),
-    };
-    let report = phv.ips(&options).await?;
-    let mut response = if q.report {
-        Json(&report).into_response()
-    } else {
-        (
-            [(header::CONTENT_TYPE, "application/fhir+json")],
-            serde_json::to_string(&report.bundle).expect("bundles serialize"),
-        )
-            .into_response()
-    };
-    if let Some(summary) = report.summary()
-        && let Ok(value) = header::HeaderValue::from_str(&summary)
-    {
-        response.headers_mut().insert("x-phv-warning", value);
-    }
-    Ok(response)
-}
-
-#[derive(Deserialize)]
 struct ReplaceQuery {
     #[serde(default)]
     dry_run: bool,
@@ -296,7 +266,6 @@ pub fn router(phv: AppState) -> Router {
             get(read_one).put(replace).delete(remove),
         )
         .route("/sources", post(add_source))
-        .route("/ips", get(ips))
         .fallback(no_such_route)
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
         .layer(middleware::from_fn(local_only))
