@@ -86,3 +86,22 @@ Rebased onto upstream main `1516558` on 2026-11-06. Fresh local results with Rus
 Final merge baseline: main `f117e12`. The upstream IPS revert is preserved; the snapshot PR does not restore IPS code, fixtures or its removed validator job. The current PR diff contains the snapshot adapter, synthetic symptom prototype, documentation and integration checks.
 
 Fresh checks on this state: **337 Rust tests passed**, zero failed or ignored; formatting and Clippy passed. **26 Node tests passed**, zero failed or skipped, against an isolated export of the exact committed prototype and the rebuilt CLI. Concurrent local personal-demo edits were excluded from that export and remain uncommitted. The export contains only the fourteen tracked prototype source files, with no personal data, dependencies or runtime state.
+
+
+## Real lab / hypothetical concern demo
+
+Implemented a separately configured `--personal-case` mode with a private manifest outside the repository. No personal values, identifiers, PDFs or real-data manifest are bundled in code or tests. The demo uses read-only source PDFs and curated selected extracts; it does not import the hypothetical concern or answers into a FHIR vault. The existing synthetic engine and adapter retain their restrictions.
+
+Verification on 2026-11-06:
+
+- 32 Node tests passed, zero failed/skipped, including the existing validated synthetic-vault import and six new personal-mode tests using invented data. Local HTTP tests required permission to open loopback ports; their initial restricted run failed with `listen EPERM`, then passed with that permission.
+- The current private case loaded nine selected results from four pinned PDFs. All four source hashes remained unchanged after the browser walkthrough. Automated checks also compare input bytes and source modification time before/after hypothetical answers and corrections.
+- Used Codex's built-in browser through the installed browser runtime (`26.1027.61615`, discovered IAB ID). Reloaded after the final interface change and repeated manual concern entry, empty concern/answer errors and recovery, review checkbox changes, onset/impact/sleep input, unknown fasting/medication and skipped goal.
+- Inspected printed fields, opened the original PDF in the built-in PDF viewer and visually confirmed it rendered. Checked that source registration/report dates and the filename-date discrepancy are explicit, without inventing a collection date.
+- Generated a brief with separate real and hypothetical sections. An unchecked result stayed deferred and the reviewed outside-focus result stayed excluded. Changed an answer, traced a source-derived claim and inspected its selection reason.
+- Recovered from a blank wording correction, then added a hypothetical correction while retaining the original finding. Exercised keep/remove confirmation for the edited source, removal and restoration.
+- Copied the brief and downloaded text and trace JSON. Read the downloaded files and verified labels, matching revision, review states, uncertainty and separate `realRecordSnapshot` / `hypotheticalSession`. Printable text matched the copied export including appendix.
+- Temporarily changed only private-manifest formatting, attempted a new correction and observed a stale-input error with the previous revision retained. Restored the manifest byte-for-byte. Source PDFs were never altered.
+- Browser console contained no warning/error messages. Two individual browser click commands timed out; the correction was retried after inspecting current DOM and then succeeded. The print action timed out and exposed no verifiable native print dialog or saved PDF. Print output remains unverified; do not describe it as tested PDF generation.
+
+Personal mode remains a curated demo, without clinical approval, free-text clinical interpretation, automatic threshold classification, current-health conclusions or urgency assessment.
