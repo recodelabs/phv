@@ -1,0 +1,13 @@
+{
+  "name": "phv-synthetic-fatigue-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "demo": "node cli.mjs",
+    "test": "node --test engine.test.mjs server.test.mjs vault-adapter.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

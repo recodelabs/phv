@@ -8,6 +8,7 @@ pub mod mcp;
 pub mod read;
 pub mod refs;
 pub mod setup;
+pub mod snapshot;
 pub mod source;
 pub mod store;
 pub mod submission;

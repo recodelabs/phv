@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "id": "synthetic-fatigue-001",
+  "patient": {"id": "synthetic-adult", "label": "Example person", "ageYears": 42, "jurisdiction": "PT"},
+  "framework": {
+    "id": "fatigue-pt-demo",
+    "version": "0.1.0-draft",
+    "status": "draft",
+    "sources": [
+      {"id": "DE-DEGAM-053002", "title": "DEGAM S3 Müdigkeit", "version": "5.0 (2023)", "jurisdiction": "DE", "status": "published", "localApproval": "pending", "url": "https://register.awmf.org/assets/guidelines/053-002l_S3_Muedigkeit_2023-01_01.pdf"},
+      {"id": "PT-DGS-0022022", "title": "DGS Norma 002/2022: Condição pós-COVID-19", "version": "17 March 2022", "jurisdiction": "PT", "status": "under_update", "localApproval": "pending", "url": "https://www.dgs.pt/normas-orientacoes-e-informacoes/normas-e-circulares-normativas/norma-n-0022022-de-17032022.aspx"}
+    ]
+  },
+  "coverage": "Synthetic records from 2022–2026: two symptom notes, one medication list, four laboratory excerpts and one unreviewed extraction. This is a partial demonstration history.",
+  "evidence": [
+    {"id": "symptom-note", "title": "Visit note: tiredness", "text": "The person reports recent unusual tiredness. Exact onset and daily impact were not recorded.", "date": "2026-10-15", "category": "symptom", "reviewStatus": "reviewed", "linkedToConcern": true, "source": {"title": "Synthetic primary care note, 15 October 2026", "locator": "fixture.json evidence[id=symptom-note].text"}},
+    {"id": "old-episode", "title": "Earlier episode discussed in the current note", "text": "An earlier episode of tiredness in 2022 was explicitly mentioned in the October 2026 visit note. Its relationship to the current episode is not established.", "date": "2022-04", "category": "symptom", "reviewStatus": "reviewed", "linkedToConcern": true, "source": {"title": "Synthetic prior-history excerpt", "locator": "fixture.json evidence[id=old-episode].text"}},
+    {"id": "medication-list", "title": "Medication list requiring confirmation", "text": "Example medicine A appears on the medication list dated 1 September 2026. Current use and any subsequent changes were not confirmed.", "date": "2026-09-01", "category": "medication", "reviewStatus": "reviewed", "source": {"title": "Synthetic medication list, 1 September 2026", "locator": "fixture.json evidence[id=medication-list].text"}},
+    {"id": "lab-cbc", "title": "Blood count excerpt", "text": "Hemoglobin: 13.6 g/dL. Printed reference interval: 12.0–16.0 g/dL. This excerpt does not contain the complete differential blood count.", "date": "2026-10-16", "category": "laboratory", "test": "blood_count", "reviewStatus": "reviewed", "source": {"title": "Synthetic laboratory report, 16 October 2026", "locator": "fixture.json evidence[id=lab-cbc].text"}},
+    {"id": "lab-tsh", "title": "Thyroid-stimulating hormone", "text": "TSH: 2.10 mIU/L. Printed reference interval: 0.40–4.00 mIU/L.", "date": "2026-10-16", "category": "laboratory", "test": "tsh", "reviewStatus": "reviewed", "source": {"title": "Synthetic laboratory report, 16 October 2026", "locator": "fixture.json evidence[id=lab-tsh].text"}},
+    {"id": "lab-glucose", "title": "Glucose", "text": "Glucose: 91 mg/dL. Printed reference interval: 70–99 mg/dL. Fasting status was not recorded in this excerpt.", "date": "2026-10-16", "category": "laboratory", "test": "glucose", "reviewStatus": "reviewed", "source": {"title": "Synthetic laboratory report, 16 October 2026", "locator": "fixture.json evidence[id=lab-glucose].text"}},
+    {"id": "unrelated-result", "title": "Unrelated flagged result", "text": "A prior laboratory excerpt contains a printed high flag for an unrelated demonstration analyte. No symptom or clinician link is documented.", "date": "2024-02-12", "category": "laboratory", "test": "unrelated_demo", "reviewStatus": "reviewed", "source": {"title": "Synthetic unrelated laboratory excerpt", "locator": "fixture.json evidence[id=unrelated-result].text"}},
+    {"id": "unreviewed-note", "title": "Unreviewed sleep extraction", "text": "An automated extraction suggests that sleep was discussed. The original wording has not been checked.", "date": "2026-10-15", "category": "sleep", "reviewStatus": "unreviewed", "source": {"title": "Synthetic extraction awaiting review", "locator": "fixture.json evidence[id=unreviewed-note].text"}}
+  ]
+}
