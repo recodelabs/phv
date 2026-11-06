@@ -1,5 +1,6 @@
 //! Turns raw vault lines into plain view data. No HTTP or HTML in here.
 
+pub mod clinical;
 pub mod documents;
 pub mod explorer;
 pub mod labs;

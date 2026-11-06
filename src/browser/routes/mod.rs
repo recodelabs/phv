@@ -1,5 +1,6 @@
 //! Routes, GET only. Each topic has its own file with its templates and handlers.
 
+mod clinical;
 mod documents;
 mod explorer;
 mod labs;
@@ -219,6 +220,7 @@ pub fn router(vaults: Vaults) -> Router {
         .merge(explorer::routes())
         .merge(vitals::routes())
         .merge(labs::routes())
+        .merge(clinical::routes())
         .merge(documents::routes())
         .fallback(fallback)
         .with_state(app)

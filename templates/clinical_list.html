@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block main %}
+<h1>{{ title }}</h1>
+{% if rows.is_empty() %}
+<p>{{ empty }}</p>
+{% else %}
+<table>
+  <tr><th>Name</th><th>Status</th>{% if show_detail %}<th>Details</th>{% endif %}<th>Date</th></tr>
+  {% for row in &rows %}
+  <tr>
+    <td><a href="/v/{{ chrome.vault }}/fhir/{{ row.resource_type }}/{{ row.id }}">{{ row.name }}</a></td>
+    <td>{{ row.status }}</td>
+    {% if show_detail %}<td>{% if let Some(detail) = &row.detail %}{{ detail }}{% endif %}</td>{% endif %}
+    <td>{{ row.date }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}
