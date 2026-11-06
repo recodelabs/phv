@@ -6,7 +6,7 @@ use crate::write::{AddOptions, Phv, WriteReport};
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use std::{
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
 };
@@ -30,6 +30,12 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Walk through creating a vault for one person. Run again for each family member.
+    Setup,
+    /// List registered vaults. The default is marked with *.
+    Vaults,
+    /// Change the default vault.
+    Use { name: String },
     /// Create a new data repo layout.
     Init { path: PathBuf },
     /// Check a resource or Bundle without writing. Use - for stdin.
@@ -44,7 +50,7 @@ pub enum Command {
         #[arg(long, requires = "source")]
         agent: Option<String>,
         /// Provenance time. Defaults to now in UTC.
-        #[arg(long)]
+        #[arg(long, requires = "source")]
         recorded_at: Option<String>,
         #[arg(long)]
         dry_run: bool,
@@ -77,6 +83,8 @@ pub enum Command {
         #[arg(long, default_value_t = 8747)]
         port: u16,
     },
+    /// Run a local MCP server over stdio for one vault, for Claude and other AI tools.
+    Mcp,
     /// Import an export from another system.
     Import {
         #[command(subcommand)]
@@ -103,10 +111,25 @@ pub(crate) fn vault_path(flag: Option<&Path>) -> Result<PathBuf, PhvError> {
     resolve_vault_path(flag, env.as_deref(), config.as_deref())
 }
 
+fn home_dir() -> Result<PathBuf, PhvError> {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| PhvError::Usage("HOME is not set".into()))
+}
+
+/// Without Git, these changes have no history to restore from.
+fn warn_if_no_history(phv: &Phv) {
+    if !phv.vault().root().join(".git").exists() {
+        eprintln!("warning: this vault has no Git history, so this change cannot be undone");
+    }
+}
+
 fn read_json(file: &str) -> Result<Value, PhvError> {
     let mut text = String::new();
     if file == "-" {
-        std::io::stdin().read_to_string(&mut text)?;
+        std::io::stdin()
+            .read_to_string(&mut text)
+            .map_err(|e| PhvError::Usage(format!("cannot read stdin: {e}")))?;
     } else {
         text = std::fs::read_to_string(file)
             .map_err(|e| PhvError::Usage(format!("cannot read {file}: {e}")))?;
@@ -124,11 +147,18 @@ fn now() -> String {
     humantime::format_rfc3339_seconds(std::time::SystemTime::now()).to_string()
 }
 
-fn print_json<T: serde::Serialize>(value: &T) {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(value).expect("reports serialize")
-    );
+/// Writes one line to stdout. A closed pipe, as in `phv list X | head -1`, ends the process
+/// quietly with status 0. Other write errors are returned.
+fn out_line(line: impl std::fmt::Display) -> Result<(), PhvError> {
+    match writeln!(std::io::stdout().lock(), "{line}") {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(0),
+        other => Ok(other?),
+    }
+}
+
+/// Prints a value as pretty JSON. Also used by `main` for error output.
+pub fn print_json<T: serde::Serialize>(value: &T) -> Result<(), PhvError> {
+    out_line(serde_json::to_string_pretty(value).expect("reports serialize"))
 }
 
 fn print_issues(issues: &[Issue]) {
@@ -137,30 +167,65 @@ fn print_issues(issues: &[Issue]) {
     }
 }
 
-fn print_write(report: &WriteReport, json: bool) {
+fn print_write(report: &WriteReport, json: bool) -> Result<(), PhvError> {
     if json {
-        print_json(report);
-        return;
+        print_json(report)?;
+        return Ok(());
     }
     let prefix = if report.dry_run { "would " } else { "" };
     for r in &report.created {
-        println!("{prefix}create {r}");
+        out_line(format!("{prefix}create {r}"))?;
     }
     for r in &report.updated {
-        println!("{prefix}update {r}");
+        out_line(format!("{prefix}update {r}"))?;
     }
     for r in &report.unchanged {
-        println!("unchanged {r}");
+        out_line(format!("unchanged {r}"))?;
     }
     print_issues(&report.warnings);
+    Ok(())
 }
 
 /// Runs a command. Findings that mean failure are returned as errors or exit code 1.
 pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
+    match &cli.command {
+        Command::Setup => {
+            crate::setup::run(&home_dir()?).await?;
+            return Ok(ExitCode::SUCCESS);
+        }
+        Command::Vaults => {
+            let registry = crate::setup::load_registry(&home_dir()?)?;
+            if cli.json {
+                print_json(&registry)?;
+            } else if registry.vaults.is_empty() {
+                println!("no vaults yet: run phv setup");
+            } else {
+                for (name, path) in &registry.vaults {
+                    let mark = if registry.default.as_deref() == Some(name) {
+                        "*"
+                    } else {
+                        " "
+                    };
+                    println!("{mark} {name}  {}", path.display());
+                }
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+        Command::Use { name } => {
+            let home = home_dir()?;
+            let mut registry = crate::setup::load_registry(&home)?;
+            registry.use_vault(name)?;
+            crate::setup::save_registry(&home, &registry)?;
+            println!("default vault is now {name}");
+            return Ok(ExitCode::SUCCESS);
+        }
+        _ => {}
+    }
+
     if let Command::Init { path } = &cli.command {
         let vault = Vault::init(path)?;
         if cli.json {
-            print_json(&serde_json::json!({"vault": vault.root()}));
+            print_json(&serde_json::json!({"vault": vault.root()}))?;
         } else {
             println!("created vault at {}", vault.root().display());
             println!("keep it private. Git is optional: phv setup can set it up for you");
@@ -176,12 +241,16 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
     let phv = Phv::new(vault).await?;
 
     match cli.command {
-        Command::Init { .. } | Command::Import { .. } => unreachable!("handled above"),
+        Command::Setup
+        | Command::Vaults
+        | Command::Use { .. }
+        | Command::Init { .. }
+        | Command::Import { .. } => unreachable!("handled above"),
         Command::Validate { file } => {
             let issues = phv.validate_submission(&read_json(&file)?).await?;
             let failed = issues.iter().any(Issue::is_error);
             if cli.json {
-                print_json(&issues);
+                print_json(&issues)?;
             } else {
                 print_issues(&issues);
                 if !failed {
@@ -202,14 +271,14 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             dry_run,
         } => {
             let input = read_json(&file)?;
-            let recorded_at = source.as_ref().map(|_| recorded_at.unwrap_or_else(now));
+            let recorded_at = recorded_at.or_else(|| source.as_ref().map(|_| now()));
             let options = AddOptions {
                 source,
                 agent,
                 recorded_at,
                 dry_run,
             };
-            print_write(&phv.add(&input, &options).await?, cli.json);
+            print_write(&phv.add(&input, &options).await?, cli.json)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Replace {
@@ -221,14 +290,18 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             let report = phv
                 .replace(resource_type, id, &read_json(&file)?, dry_run)
                 .await?;
-            print_write(&report, cli.json);
+            print_write(&report, cli.json)?;
+            if !dry_run && !report.updated.is_empty() {
+                warn_if_no_history(&phv);
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Rm { target } => {
             let (resource_type, id) = split_target(&target)?;
             phv.remove(resource_type, id).await?;
+            warn_if_no_history(&phv);
             if cli.json {
-                print_json(&serde_json::json!({"removed": target}));
+                print_json(&serde_json::json!({"removed": target}))?;
             } else {
                 println!(
                     "removed {target}. In a vault with Git, it stays in history until you rewrite that history"
@@ -238,7 +311,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         }
         Command::Get { target } => {
             let (resource_type, id) = split_target(&target)?;
-            println!("{}", phv.get(resource_type, id)?);
+            out_line(phv.get(resource_type, id)?)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::List {
@@ -247,7 +320,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         } => {
             let result = phv.search(&resource_type, filter.as_deref()).await?;
             for line in &result.lines {
-                println!("{line}");
+                out_line(line)?;
             }
             if let Some(warning) = result.warning() {
                 eprintln!("warning: {warning}");
@@ -268,7 +341,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             };
             let report = phv.source_add_with(&name, &bytes, &options).await?;
             if cli.json {
-                print_json(&report);
+                print_json(&report)?;
             } else {
                 if report.restored {
                     println!("restored the stored file, which was missing or damaged");
@@ -287,7 +360,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             let issues = phv.check().await?;
             let failed = issues.iter().any(Issue::is_error);
             if cli.json {
-                print_json(&issues);
+                print_json(&issues)?;
             } else {
                 print_issues(&issues);
                 if !failed {
@@ -302,6 +375,10 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
         }
         Command::Serve { port } => {
             crate::api::serve(phv, port).await?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Mcp => {
+            crate::mcp::serve(phv).await?;
             Ok(ExitCode::SUCCESS)
         }
     }

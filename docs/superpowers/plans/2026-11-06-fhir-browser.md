@@ -38,7 +38,7 @@
 | `templates/` | Askama HTML with automatic escaping. Never mark record text as safe |
 | `assets/` | Stylesheet and the pinned htmx file |
 | `examples/browser.rs` | Starts the browser until `phv serve` can host it |
-| `tests/fixtures/sample-vault/` | Synthetic vault used by all browser tests |
+| `tests/fixtures/browser-vault/` | Synthetic vault used by all browser tests |
 | `tests/browser_*.rs` | One test file per task |
 
 ## Tasks
@@ -178,7 +178,7 @@ All browser tests use this small synthetic vault. These tests keep it honest: li
 **Files:**
 
 - Create: `tests/browser_common/mod.rs`
-- Create: `tests/fixtures/sample-vault/` (`phv.toml`, `records/`, `sources/`)
+- Create: `tests/fixtures/browser-vault/` (`phv.toml`, `records/`, `sources/`)
 - Test: `tests/browser_fixture.rs`
 
 - [ ] **Step 1: Create the shared test helpers in `tests/browser_common/mod.rs`**
@@ -192,7 +192,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 pub fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample-vault")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/browser-vault")
 }
 
 /// Every resource of a type in the sample vault.
@@ -293,9 +293,9 @@ async fn every_record_passes_validation() {
 
 Run: `cargo test --test browser_fixture`
 
-Expected: FAIL, because `tests/fixtures/sample-vault` does not exist.
+Expected: FAIL, because `tests/fixtures/browser-vault` does not exist.
 
-- [ ] **Step 4: Create `tests/fixtures/sample-vault/phv.toml`**
+- [ ] **Step 4: Create `tests/fixtures/browser-vault/phv.toml`**
 
 ```toml
 format_version = 1
@@ -307,8 +307,8 @@ fhir_version = "4.0.1"
 The byte content matters, because each file is named for its SHA-256.
 
 ```bash
-mkdir -p tests/fixtures/sample-vault/sources
-cat > tests/fixtures/sample-vault/sources/1bb0ff96726fa961b697cbb7a3c9cf60d8b28c451054a3d044ba9095d4a0d412.pdf <<'EOF'
+mkdir -p tests/fixtures/browser-vault/sources
+cat > tests/fixtures/browser-vault/sources/1bb0ff96726fa961b697cbb7a3c9cf60d8b28c451054a3d044ba9095d4a0d412.pdf <<'EOF'
 %PDF-1.4
 1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
@@ -320,8 +320,8 @@ endobj
 5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
 trailer<</Root 1 0 R>>
 EOF
-printf 'Synthetic pharmacy receipt. Not real data.\n' > tests/fixtures/sample-vault/sources/82f7258fe85a893e067ec1c27ac161dafd511455dce49426a6d973d4e5ce4479.txt
-shasum -a 256 tests/fixtures/sample-vault/sources/*
+printf 'Synthetic pharmacy receipt. Not real data.\n' > tests/fixtures/browser-vault/sources/82f7258fe85a893e067ec1c27ac161dafd511455dce49426a6d973d4e5ce4479.txt
+shasum -a 256 tests/fixtures/browser-vault/sources/*
 # Expected: each hash matches its file name
 ```
 
@@ -329,13 +329,13 @@ shasum -a 256 tests/fixtures/sample-vault/sources/*
 
 Each file must match exactly, because the test compares lines with canonical output.
 
-`tests/fixtures/sample-vault/records/AllergyIntolerance.ndjson`:
+`tests/fixtures/browser-vault/records/AllergyIntolerance.ndjson`:
 
 ```json
 {"resourceType":"AllergyIntolerance","id":"allergy-penicillin","clinicalStatus":{"coding":[{"code":"active","system":"http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical"}]},"code":{"text":"Penicillin"},"patient":{"reference":"Patient/patient-maya"},"reaction":[{"manifestation":[{"text":"Hives"}]}],"recordedDate":"2010-04-02"}
 ```
 
-`tests/fixtures/sample-vault/records/Condition.ndjson`:
+`tests/fixtures/browser-vault/records/Condition.ndjson`:
 
 ```json
 {"resourceType":"Condition","id":"condition-asthma","clinicalStatus":{"coding":[{"code":"active","system":"http://terminology.hl7.org/CodeSystem/condition-clinical"}]},"code":{"text":"Asthma"},"onsetDateTime":"2001-05-01","subject":{"reference":"Patient/patient-maya"}}
@@ -344,7 +344,7 @@ Each file must match exactly, because the test compares lines with canonical out
 {"resourceType":"Condition","id":"condition-resolved","clinicalStatus":{"coding":[{"code":"resolved","system":"http://terminology.hl7.org/CodeSystem/condition-clinical"}]},"code":{"text":"Sinusitis"},"onsetDateTime":"2023-02-10","subject":{"reference":"Patient/patient-maya"}}
 ```
 
-`tests/fixtures/sample-vault/records/DiagnosticReport.ndjson`:
+`tests/fixtures/browser-vault/records/DiagnosticReport.ndjson`:
 
 ```json
 {"resourceType":"DiagnosticReport","id":"report-2025","category":[{"coding":[{"code":"LAB","system":"http://terminology.hl7.org/CodeSystem/v2-0074"}]}],"code":{"text":"Glucose test"},"effectiveDateTime":"2025-03-11","result":[{"reference":"Observation/lab-glucose-2025"}],"status":"final","subject":{"reference":"Patient/patient-maya"}}
@@ -352,7 +352,7 @@ Each file must match exactly, because the test compares lines with canonical out
 {"resourceType":"DiagnosticReport","id":"report-imaging","category":[{"coding":[{"code":"RAD","system":"http://terminology.hl7.org/CodeSystem/v2-0074"}]}],"code":{"text":"Chest X-ray"},"effectiveDateTime":"2024-01-15","status":"final","subject":{"reference":"Patient/patient-maya"}}
 ```
 
-`tests/fixtures/sample-vault/records/DocumentReference.ndjson`:
+`tests/fixtures/browser-vault/records/DocumentReference.ndjson`:
 
 ```json
 {"resourceType":"DocumentReference","id":"document-lab","category":[{"coding":[{"code":"lab","system":"urn:phv:document-category"}]}],"content":[{"attachment":{"contentType":"application/pdf","title":"metabolic-panel.pdf","url":"sources/1bb0ff96726fa961b697cbb7a3c9cf60d8b28c451054a3d044ba9095d4a0d412.pdf"}}],"date":"2026-10-15T09:00:00Z","identifier":[{"system":"urn:phv:sha256","value":"1bb0ff96726fa961b697cbb7a3c9cf60d8b28c451054a3d044ba9095d4a0d412"}],"status":"current","subject":{"reference":"Patient/patient-maya"}}
@@ -360,38 +360,38 @@ Each file must match exactly, because the test compares lines with canonical out
 {"resourceType":"DocumentReference","id":"document-receipt","category":[{"coding":[{"code":"receipt","system":"urn:phv:document-category"}]}],"content":[{"attachment":{"contentType":"text/plain","title":"pharmacy-receipt.txt","url":"sources/82f7258fe85a893e067ec1c27ac161dafd511455dce49426a6d973d4e5ce4479.txt"}}],"date":"2026-10-02T17:30:00Z","identifier":[{"system":"urn:phv:sha256","value":"82f7258fe85a893e067ec1c27ac161dafd511455dce49426a6d973d4e5ce4479"}],"status":"current","subject":{"reference":"Patient/patient-maya"}}
 ```
 
-`tests/fixtures/sample-vault/records/Encounter.ndjson`:
+`tests/fixtures/browser-vault/records/Encounter.ndjson`:
 
 ```json
 {"resourceType":"Encounter","id":"encounter-1","class":{"code":"AMB","system":"http://terminology.hl7.org/CodeSystem/v3-ActCode"},"status":"finished","subject":{"reference":"Patient/patient-maya"}}
 ```
 
-`tests/fixtures/sample-vault/records/Immunization.ndjson`:
+`tests/fixtures/browser-vault/records/Immunization.ndjson`:
 
 ```json
 {"resourceType":"Immunization","id":"vaccine-flu","occurrenceDateTime":"2026-09-02","patient":{"reference":"Patient/patient-maya"},"status":"completed","vaccineCode":{"text":"Influenza"}}
 {"resourceType":"Immunization","id":"vaccine-mmr-not-given","occurrenceString":"Spring 2020","patient":{"reference":"Patient/patient-maya"},"status":"not-done","vaccineCode":{"text":"MMR"}}
 ```
 
-`tests/fixtures/sample-vault/records/Medication.ndjson`:
+`tests/fixtures/browser-vault/records/Medication.ndjson`:
 
 ```json
 {"resourceType":"Medication","id":"medication-amoxicillin","code":{"text":"Amoxicillin 500 mg"}}
 ```
 
-`tests/fixtures/sample-vault/records/MedicationRequest.ndjson`:
+`tests/fixtures/browser-vault/records/MedicationRequest.ndjson`:
 
 ```json
 {"resourceType":"MedicationRequest","id":"request-amoxicillin","authoredOn":"2023-02-10","dosageInstruction":[{"text":"Three times a day for 7 days"}],"intent":"order","medicationReference":{"reference":"Medication/medication-amoxicillin"},"status":"completed","subject":{"reference":"Patient/patient-maya"}}
 ```
 
-`tests/fixtures/sample-vault/records/MedicationStatement.ndjson`:
+`tests/fixtures/browser-vault/records/MedicationStatement.ndjson`:
 
 ```json
 {"resourceType":"MedicationStatement","id":"statement-levothyroxine","dosage":[{"text":"One tablet each morning"}],"effectiveDateTime":"2019-08-01","medicationCodeableConcept":{"text":"Levothyroxine 50 mcg"},"status":"active","subject":{"reference":"Patient/patient-maya"}}
 ```
 
-`tests/fixtures/sample-vault/records/Observation.ndjson`:
+`tests/fixtures/browser-vault/records/Observation.ndjson`:
 
 ```json
 {"resourceType":"Observation","id":"lab-creatinine-2026","category":[{"coding":[{"code":"laboratory","system":"http://terminology.hl7.org/CodeSystem/observation-category"}]}],"code":{"coding":[{"code":"2160-0","system":"http://loinc.org"}],"text":"Creatinine"},"effectiveDateTime":"2026-10-14","interpretation":[{"text":"H"}],"referenceRange":[{"high":{"unit":"mg/dL","value":1.30},"low":{"unit":"mg/dL","value":0.70}}],"status":"final","subject":{"reference":"Patient/patient-maya"},"valueQuantity":{"unit":"mg/dL","value":1.50}}
@@ -410,13 +410,13 @@ Each file must match exactly, because the test compares lines with canonical out
 {"resourceType":"Observation","id":"vital-weight-error","category":[{"coding":[{"code":"vital-signs","system":"http://terminology.hl7.org/CodeSystem/observation-category"}]}],"code":{"coding":[{"code":"29463-7","system":"http://loinc.org"}],"text":"Body weight"},"effectiveDateTime":"2026-10-01","status":"entered-in-error","subject":{"reference":"Patient/patient-maya"},"valueQuantity":{"unit":"kg","value":700}}
 ```
 
-`tests/fixtures/sample-vault/records/Patient.ndjson`:
+`tests/fixtures/browser-vault/records/Patient.ndjson`:
 
 ```json
 {"resourceType":"Patient","id":"patient-maya","birthDate":"1988-03-14","gender":"female","name":[{"family":"Example","given":["Maya"]}]}
 ```
 
-`tests/fixtures/sample-vault/records/Provenance.ndjson`:
+`tests/fixtures/browser-vault/records/Provenance.ndjson`:
 
 ```json
 {"resourceType":"Provenance","id":"provenance-lab","agent":[{"who":{"display":"phv-add-lab"}}],"entity":[{"role":"source","what":{"reference":"DocumentReference/document-lab"}}],"recorded":"2026-10-15T09:01:00Z","target":[{"reference":"DiagnosticReport/report-2026"},{"reference":"Observation/lab-creatinine-2026"},{"reference":"Observation/lab-crp-2026"},{"reference":"Observation/lab-glucose-2026"}]}
@@ -432,7 +432,7 @@ Expected: 3 tests pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add tests/browser_common tests/browser_fixture.rs tests/fixtures/sample-vault
+git add tests/browser_common tests/browser_fixture.rs tests/fixtures/browser-vault
 git commit -m "test: add a synthetic sample vault for the browser"
 ```
 
@@ -1007,7 +1007,7 @@ use std::path::{Path, PathBuf};
 use tower::ServiceExt;
 
 pub fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample-vault")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/browser-vault")
 }
 
 /// Every resource of a type in the sample vault.
@@ -5174,7 +5174,7 @@ Expected: all pass. When this plan was written, the full suite was 204 tests on 
 Automated tests can't see layout or browser PDF viewers.
 
 ```bash
-cargo run --example browser -- --vault tests/fixtures/sample-vault --port 8791
+cargo run --example browser -- --vault tests/fixtures/browser-vault --port 8791
 ```
 
 Open `http://127.0.0.1:8791/` and confirm each of these:
@@ -5507,7 +5507,7 @@ Expected: all pass, including the REST API's existing `Host` and `Origin` tests.
 - [ ] **Step 8: Check it by hand**
 
 ```bash
-cargo run -q -- --vault tests/fixtures/sample-vault serve --port 8791
+cargo run -q -- --vault tests/fixtures/browser-vault serve --port 8791
 ```
 
 Open `http://127.0.0.1:8791/` and confirm the Overview loads, then confirm `http://127.0.0.1:8791/resources/Patient` returns NDJSON. Stop the server afterward.

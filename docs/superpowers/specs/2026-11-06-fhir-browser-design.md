@@ -46,7 +46,7 @@ New dependency: `askama`. The existing test that keeps HTTP clients and SQLite o
 The browser ends up inside the planned `phv serve` (vault core Tasks 11 and 12), next to the REST API, on the same port. Until that exists, `examples/browser.rs` starts it, which avoids colliding with the CLI work:
 
 ```text
-cargo run --example browser -- --vault tests/fixtures/sample-vault
+cargo run --example browser -- --vault tests/fixtures/browser-vault
 ```
 
 ### Vaults
@@ -191,7 +191,7 @@ Record text and original files may hold anything, because they come from outside
 
 ## Testing
 
-All test data is synthetic. `tests/fixtures/sample-vault/` is a small handwritten vault covering every topic, and a test runs it through the validator and `phv check` once they are merged, so it stays realistic. It stays out of the root-anchored `.gitignore` rules.
+All test data is synthetic. `tests/fixtures/browser-vault/` is a small handwritten vault covering every topic, and a test runs it through the validator and `phv check` once they are merged, so it stays realistic. It stays out of the root-anchored `.gitignore` rules.
 
 - **Model:** topic rules, including a `DiagnosticReport` with and without a category. Exact numbers (`1.50`, `<0.5`), date-only values, missing dates, blood pressure with components and as separate records, grouping by LOINC code and by text, `entered-in-error`, `not-done`, a missing status, unparseable lines and medicine name fallbacks.
 - **Routes:** every page returns 200 against the fixture and 404 for unknown keys. Partials return only with `HX-Request`.

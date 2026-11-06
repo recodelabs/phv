@@ -1,15 +1,23 @@
 use clap::Parser;
-use phv::cli::{Cli, run};
+use phv::cli::{Cli, print_json, run};
 use std::process::ExitCode;
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run(Cli::parse()).await {
+    let cli = Cli::parse();
+    let json = cli.json;
+    match run(cli).await {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("phv: {error}");
-            for issue in error.issues() {
-                eprintln!("  {issue}");
+            if json {
+                let body =
+                    serde_json::json!({"error": error.to_string(), "issues": error.issues()});
+                let _ = print_json(&body);
+            } else {
+                eprintln!("phv: {error}");
+                for issue in error.issues() {
+                    eprintln!("  {issue}");
+                }
             }
             error.exit_code()
         }

@@ -117,24 +117,24 @@ impl Phv {
                     ));
                 }
                 let id = resource["id"].as_str().unwrap_or("").to_string();
-                if !is_valid_id(&id) {
-                    issues.push(Issue::error(
-                        "PHV-ID",
-                        &location,
-                        "resource has a missing or invalid id",
-                    ));
+                if resource.get("id").is_none() {
+                    // The validator reports an id that is present but invalid.
+                    issues.push(Issue::error("PHV-ID", &location, "resource has no id"));
                 }
-                if !seen.insert(id.clone()) {
-                    issues.push(Issue::error(
-                        "PHV-DUPLICATE",
-                        &location,
-                        format!("ID {id} appears more than once"),
-                    ));
+                // A line with a bad id already has a PHV-ID, so it is left out of these two.
+                if is_valid_id(&id) {
+                    if !seen.insert(id.clone()) {
+                        issues.push(Issue::error(
+                            "PHV-DUPLICATE",
+                            &location,
+                            format!("ID {id} appears more than once"),
+                        ));
+                    }
+                    if previous.as_deref().is_some_and(|p| p > id.as_str()) {
+                        issues.push(Issue::error("PHV-ORDER", &location, "line is out of order"));
+                    }
+                    previous = Some(id);
                 }
-                if previous.as_deref().is_some_and(|p| p > id.as_str()) {
-                    issues.push(Issue::error("PHV-ORDER", &location, "line is out of order"));
-                }
-                previous = Some(id);
                 for issue in self.validator.validate(&resource).await {
                     issues.push(Issue {
                         path: format!("{location} {}", issue.path),
@@ -143,6 +143,22 @@ impl Phv {
                 }
                 parsed.push((location, resource));
             }
+        }
+
+        let patients: Vec<&String> = parsed
+            .iter()
+            .filter(|(_, r)| r["resourceType"] == "Patient")
+            .map(|(location, _)| location)
+            .collect();
+        if patients.len() > 1 {
+            issues.push(Issue::error(
+                "PHV-PATIENT",
+                "records/Patient.ndjson",
+                format!(
+                    "a vault holds one Patient, found {}: remove the extras",
+                    patients.len()
+                ),
+            ));
         }
 
         let known: HashSet<String> = parsed.iter().map(|(_, r)| resource_ref(r)).collect();

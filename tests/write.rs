@@ -483,3 +483,23 @@ async fn the_one_patient_rule_applies_only_when_a_patient_is_submitted() {
         PhvError::Conflict(_)
     ));
 }
+
+#[tokio::test]
+async fn agent_or_recorded_at_without_a_source_is_refused_and_writes_nothing() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    for options in [
+        AddOptions {
+            agent: Some("x".into()),
+            ..AddOptions::default()
+        },
+        AddOptions {
+            recorded_at: Some("2026-11-06T12:00:00Z".into()),
+            ..AddOptions::default()
+        },
+    ] {
+        let error = phv.add(&lab(&patient, "1.50"), &options).await.unwrap_err();
+        assert!(matches!(error, PhvError::Usage(_)), "{error:?}");
+    }
+    assert_eq!(records(&phv, "Observation"), "");
+}

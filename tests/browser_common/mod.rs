@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use tower::ServiceExt;
 
 pub fn fixture_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample-vault")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/browser-vault")
 }
 
 /// Every resource of a type in the sample vault.

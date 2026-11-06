@@ -1,1 +1,1 @@
-{"resourceType":"Patient","id":"patient-maya","birthDate":"1988-03-14","gender":"female","name":[{"family":"Example","given":["Maya"]}]}
+{"resourceType":"Patient","id":"sample0000000000000000000000000a","birthDate":"1980-01-01","name":[{"family":"Example","given":["Test"]}]}
