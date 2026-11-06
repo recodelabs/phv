@@ -13,20 +13,31 @@ pub struct SourceReport {
     pub sha256: String,
     pub document_reference: String,
     pub already_imported: bool,
+    /// True when the stored file was missing or damaged and was rewritten from the upload.
+    pub restored: bool,
     pub warnings: Vec<Issue>,
 }
 
-/// Only the last path component of an untrusted name is kept. It is used as a title, never as a path.
+/// Longest title kept, in characters.
+const MAX_TITLE_CHARS: usize = 255;
+
+/// Only the last path component of an untrusted name is kept, splitting on both `/` and `\`.
+/// It is used as a title and to pick an extension, never as a path.
 fn clean_name(file_name: &str) -> String {
-    Path::new(file_name)
-        .file_name()
-        .and_then(|n| n.to_str())
+    file_name
+        .split(['/', '\\'])
+        .rfind(|part| !part.is_empty() && *part != "." && *part != "..")
         .unwrap_or("source")
         .to_string()
 }
 
-fn extension(file_name: &str) -> String {
-    let ext = Path::new(file_name)
+/// The title: the cleaned name capped at `MAX_TITLE_CHARS` characters, on a character boundary.
+fn title(name: &str) -> String {
+    name.chars().take(MAX_TITLE_CHARS).collect()
+}
+
+fn extension(name: &str) -> String {
+    let ext = Path::new(name)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
@@ -65,11 +76,29 @@ pub(crate) fn build_provenance(
     agent: &str,
     recorded: &str,
 ) -> Result<Value, PhvError> {
+    if sha256.len() != 64
+        || !sha256
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    {
+        return Err(PhvError::Usage(
+            "--source needs the full 64-character lowercase hex SHA-256 of the file".into(),
+        ));
+    }
+    if agent.trim().is_empty() {
+        return Err(PhvError::Usage("--agent must not be blank".into()));
+    }
     let document = document_id(sha256);
-    if vault.get("DocumentReference", &document)?.is_none() {
-        return Err(PhvError::NotFound(format!(
-            "source {sha256}: run phv source add first"
-        )));
+    let not_found = || PhvError::NotFound(format!("source {sha256}: run phv source add first"));
+    let stored = vault
+        .get("DocumentReference", &document)?
+        .ok_or_else(not_found)?;
+    let stored: Value = serde_json::from_str(&stored).map_err(|_| not_found())?;
+    let matches_hash = stored["identifier"]
+        .as_array()
+        .is_some_and(|ids| ids.iter().any(|i| i["value"].as_str() == Some(sha256)));
+    if !matches_hash {
+        return Err(not_found());
     }
     let mut sorted: Vec<&String> = targets.iter().collect();
     sorted.sort();
@@ -95,17 +124,20 @@ impl Phv {
         let sha256 = sha256_hex(bytes);
         let id = document_id(&sha256);
         let document_reference = format!("DocumentReference/{id}");
-        if self.vault().get("DocumentReference", &id)?.is_some() {
+        if let Some(stored) = self.vault().get("DocumentReference", &id)? {
+            let restored = self.restore_if_lost(&document_reference, &stored, &sha256, bytes)?;
             return Ok(SourceReport {
                 sha256,
                 document_reference,
                 already_imported: true,
+                restored,
                 warnings: Vec::new(),
             });
         }
 
         let name = clean_name(file_name);
         let ext = extension(&name);
+        let title = title(&name);
         let relative = format!("sources/{sha256}.{ext}");
         let mut resource = json!({
             "resourceType": "DocumentReference",
@@ -115,7 +147,7 @@ impl Phv {
             "content": [{"attachment": {
                 "contentType": content_type(&ext),
                 "url": relative,
-                "title": name
+                "title": title
             }}]
         });
         let patient = self
@@ -145,7 +177,44 @@ impl Phv {
             sha256,
             document_reference,
             already_imported: false,
+            restored: false,
             warnings,
         })
+    }
+
+    /// Rewrites the stored file when it is missing or its hash differs from this upload.
+    /// The record's `url` is untrusted, so it must stay inside `sources/`.
+    fn restore_if_lost(
+        &self,
+        reference: &str,
+        stored: &str,
+        sha256: &str,
+        bytes: &[u8],
+    ) -> Result<bool, PhvError> {
+        let refuse = |message: &str| {
+            PhvError::Conflict(vec![Issue::error("PHV-SOURCE-URL", reference, message)])
+        };
+        let record: Value = serde_json::from_str(stored)
+            .map_err(|_| refuse("the stored record is not valid JSON"))?;
+        let url = record["content"][0]["attachment"]["url"]
+            .as_str()
+            .ok_or_else(|| refuse("the stored record has no attachment url"))?;
+        let inside = url
+            .strip_prefix("sources/")
+            .is_some_and(|rest| !rest.is_empty());
+        if !inside || url.contains("..") || url.contains('\\') {
+            return Err(refuse("the stored attachment url is not inside sources/"));
+        }
+        let path = self.vault().root().join(url);
+        let intact = match std::fs::read(&path) {
+            Ok(current) => sha256_hex(&current) == sha256,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            Err(e) => return Err(e.into()),
+        };
+        if intact {
+            return Ok(false);
+        }
+        self.vault().write_atomic(&path, bytes)?;
+        Ok(true)
     }
 }

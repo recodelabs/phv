@@ -138,3 +138,174 @@ async fn an_unknown_source_is_refused() {
     assert!(matches!(err, PhvError::NotFound(_)), "{err:?}");
     assert_eq!(records(&phv, "Observation"), "");
 }
+
+fn stored_path(phv: &phv::write::Phv, sha: &str) -> std::path::PathBuf {
+    phv.vault().root().join(format!("sources/{sha}.pdf"))
+}
+
+#[tokio::test]
+async fn a_deleted_source_file_is_restored_on_re_add() {
+    let (_d, phv) = phv().await;
+    let first = phv.source_add("a.pdf", PDF).await.unwrap();
+    assert!(!first.restored);
+    let path = stored_path(&phv, &first.sha256);
+    std::fs::remove_file(&path).unwrap();
+    let before = records(&phv, "DocumentReference");
+
+    let second = phv.source_add("a.pdf", PDF).await.unwrap();
+    assert!(second.already_imported);
+    assert!(second.restored);
+    assert_eq!(std::fs::read(&path).unwrap(), PDF);
+    assert_eq!(records(&phv, "DocumentReference"), before);
+}
+
+#[tokio::test]
+async fn a_corrupted_source_file_is_restored_on_re_add() {
+    let (_d, phv) = phv().await;
+    let first = phv.source_add("a.pdf", PDF).await.unwrap();
+    let path = stored_path(&phv, &first.sha256);
+    std::fs::write(&path, b"damaged").unwrap();
+
+    let second = phv.source_add("a.pdf", PDF).await.unwrap();
+    assert!(second.already_imported && second.restored);
+    assert_eq!(std::fs::read(&path).unwrap(), PDF);
+}
+
+#[tokio::test]
+async fn an_intact_source_file_is_not_rewritten() {
+    use std::os::unix::fs::MetadataExt;
+    let (_d, phv) = phv().await;
+    let first = phv.source_add("a.pdf", PDF).await.unwrap();
+    let path = stored_path(&phv, &first.sha256);
+    let before = std::fs::metadata(&path).unwrap();
+
+    let second = phv.source_add("a.pdf", PDF).await.unwrap();
+    assert!(second.already_imported);
+    assert!(!second.restored);
+    let after = std::fs::metadata(&path).unwrap();
+    assert_eq!(before.ino(), after.ino());
+    assert_eq!(before.mtime_nsec(), after.mtime_nsec());
+}
+
+#[tokio::test]
+async fn a_stored_url_outside_sources_is_refused_not_followed() {
+    let (_d, phv) = phv().await;
+    let first = phv.source_add("a.pdf", PDF).await.unwrap();
+    let file = phv.vault().root().join("records/DocumentReference.ndjson");
+    let edited = std::fs::read_to_string(&file).unwrap().replace(
+        &format!("sources/{}.pdf", first.sha256),
+        "sources/../../evil",
+    );
+    std::fs::write(&file, edited).unwrap();
+
+    let err = phv.source_add("a.pdf", PDF).await.unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)), "{err:?}");
+    assert!(!phv.vault().root().join("../evil").exists());
+    assert!(!phv.vault().root().join("evil").exists());
+
+    let edited = std::fs::read_to_string(&file)
+        .unwrap()
+        .replace("sources/../../evil", "elsewhere/x.pdf");
+    std::fs::write(&file, edited).unwrap();
+    let err = phv.source_add("a.pdf", PDF).await.unwrap_err();
+    assert!(matches!(err, PhvError::Conflict(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn non_canonical_source_hashes_are_refused_with_usage() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let source = phv.source_add("a.pdf", PDF).await.unwrap();
+    let sha = &source.sha256;
+    let bad = [
+        sha[..32].to_string(),
+        format!("{}zzzz", &sha[..32]),
+        format!("{}/../x", &sha[..32]),
+        sha.to_uppercase(),
+    ];
+    for value in bad {
+        let err = phv
+            .add(&lab(&patient, "1.50"), &options(&value))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, PhvError::Usage(_)), "{value}: {err:?}");
+    }
+    assert_eq!(records(&phv, "Observation"), "");
+    assert_eq!(records(&phv, "Provenance"), "");
+}
+
+#[tokio::test]
+async fn a_source_whose_full_hash_differs_from_the_stored_identifier_is_not_found() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let source = phv.source_add("a.pdf", PDF).await.unwrap();
+    // Same first 32 characters, different tail: a different file, not this document.
+    let other = format!("{}{}", &source.sha256[..32], "0".repeat(32));
+    assert_ne!(other, source.sha256);
+    let err = phv
+        .add(&lab(&patient, "1.50"), &options(&other))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, PhvError::NotFound(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn a_blank_agent_is_refused() {
+    let (_d, phv) = phv().await;
+    let patient = add_patient(&phv).await;
+    let source = phv.source_add("a.pdf", PDF).await.unwrap();
+    for agent in ["", "   \t"] {
+        let opts = AddOptions {
+            agent: Some(agent.into()),
+            ..options(&source.sha256)
+        };
+        let err = phv.add(&lab(&patient, "1.50"), &opts).await.unwrap_err();
+        assert!(matches!(err, PhvError::Usage(_)), "{agent:?}: {err:?}");
+    }
+    assert_eq!(records(&phv, "Observation"), "");
+}
+
+fn title_of(line: &str) -> String {
+    let value: serde_json::Value = serde_json::from_str(line.lines().next().unwrap()).unwrap();
+    value["content"][0]["attachment"]["title"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+#[tokio::test]
+async fn a_windows_path_keeps_only_the_file_name_as_title() {
+    let (_d, phv) = phv().await;
+    let report = phv.source_add(r"C:\Users\me\scan.pdf", PDF).await.unwrap();
+    let line = records(&phv, "DocumentReference");
+    assert_eq!(title_of(&line), "scan.pdf");
+    assert!(!line.contains("Users"), "{line}");
+    assert!(stored_path(&phv, &report.sha256).exists());
+}
+
+#[tokio::test]
+async fn a_very_long_name_is_capped_and_keeps_its_extension() {
+    let (_d, phv) = phv().await;
+    let report = phv
+        .source_add(&format!("{}.pdf", "a".repeat(5000)), PDF)
+        .await
+        .unwrap();
+    assert_eq!(
+        title_of(&records(&phv, "DocumentReference"))
+            .chars()
+            .count(),
+        255
+    );
+    assert!(stored_path(&phv, &report.sha256).exists());
+}
+
+#[tokio::test]
+async fn a_multibyte_name_past_the_cap_does_not_panic() {
+    let (_d, phv) = phv().await;
+    phv.source_add(&format!("{}.pdf", "é".repeat(300)), PDF)
+        .await
+        .unwrap();
+    let title = title_of(&records(&phv, "DocumentReference"));
+    assert_eq!(title.chars().count(), 255);
+    assert!(title.chars().all(|c| c == 'é'));
+}
