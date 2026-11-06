@@ -1,0 +1,27 @@
+{% if chips.len() == 1 %}
+<p>No claims yet. Insurance remittance files can be added with <code>phv import x12-835</code>.</p>
+{% else %}
+<div class="chips">
+  {% for chip in &chips %}
+  <a class="chip" href="/v/{{ vault }}/claims{% if !chip.code.is_empty() %}?year={{ chip.code }}{% endif %}" hx-get="/v/{{ vault }}/claims{% if !chip.code.is_empty() %}?year={{ chip.code }}{% endif %}" hx-target="#claim-list" hx-push-url="true"{% if chip.on %} aria-current="true"{% endif %}>{{ chip.label }} {{ chip.count }}</a>
+  {% endfor %}
+</div>
+<p class="split-total"><b>{{ billed }}</b> billed across {{ rows.len() }} {% if rows.len() == 1 %}claim{% else %}claims{% endif %}</p>
+{% let segments = &segments %}
+{% include "split_bar.html" %}
+<table>
+  <tr><th>Date</th><th>Provider</th><th class="num">Billed</th><th class="num">Plan paid</th><th class="num">Patient's share</th></tr>
+  {% for row in &rows %}
+  <tr>
+    <td class="nowrap">{{ row.date }}</td>
+    <td>
+      <a href="/v/{{ vault }}/claims/{{ row.id_url }}">{{ row.provider }}</a>
+      <div class="muted small">{{ row.services }}{% if let Some(note) = &row.note %} · {{ note }}{% endif %}</div>
+    </td>
+    <td class="num">{{ row.billed }}</td>
+    <td class="num">{{ row.plan_paid }}</td>
+    <td class="num">{{ row.patient }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}

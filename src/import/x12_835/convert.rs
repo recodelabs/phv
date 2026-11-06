@@ -22,7 +22,8 @@ const CARC: &str = "https://x12.org/codes/claim-adjustment-reason-codes";
 const CLAIM_TYPE: &str = "http://terminology.hl7.org/CodeSystem/claim-type";
 const CPT: &str = "http://www.ama-assn.org/go/cpt";
 const DATA_ABSENT: &str = "http://terminology.hl7.org/CodeSystem/data-absent-reason";
-const GROUP_CODE: &str = "urn:phv:x12:claim-adjustment-group-code";
+/// Whose responsibility an adjustment is. X12 publishes no FHIR system for these.
+pub const GROUP_CODE: &str = "urn:phv:x12:claim-adjustment-group-code";
 const FILING_INDICATOR: &str = "urn:phv:x12:claim-filing-indicator";
 const HCPCS: &str = "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets";
 const PAYEE_TYPE: &str = "http://terminology.hl7.org/CodeSystem/payeetype";

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.row.provider }}{% endblock %}
+{% block main %}
+<p class="sub"><a href="/v/{{ chrome.vault }}/claims">All claims</a></p>
+<h1>{{ detail.row.provider }}</h1>
+<p class="sub">
+  {{ detail.row.date }}{% if let Some(kind) = &detail.row.kind %} · {{ kind }}{% endif %}
+  {% if let Some(href) = &original %} · <a href="{{ href }}">Original file</a>{% endif %}
+  · <a href="/v/{{ chrome.vault }}/fhir/ExplanationOfBenefit/{{ detail.row.id_url }}">View FHIR</a>
+</p>
+<p class="split-total"><b>{{ detail.row.billed }}</b> billed{% if let Some(note) = &detail.row.note %} · {{ note }}{% endif %}</p>
+{% let segments = &detail.segments %}
+{% include "split_bar.html" %}
+<h2>Services</h2>
+<table>
+  <tr><th>Date</th><th>Service</th><th class="num">Billed</th><th class="num">Discount</th><th class="num">Plan paid</th><th class="num">Patient's share</th></tr>
+  {% for line in &detail.lines %}
+  <tr>
+    <td class="nowrap">{{ line.date }}</td>
+    <td>{{ line.name }}<div class="muted small">{{ line.code }}</div></td>
+    <td class="num">{{ line.billed }}</td>
+    <td class="num">{{ line.discount }}</td>
+    <td class="num">{{ line.plan_paid }}</td>
+    <td class="num">{{ line.patient }}{% for part in &line.patient_parts %}<div class="muted small">{{ part }}</div>{% endfor %}</td>
+  </tr>
+  {% endfor %}
+</table>
+<h2>Details</h2>
+<table class="facts">
+  {% for fact in &detail.facts %}
+  <tr><th>{{ fact.label }}</th><td>{{ fact.value }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

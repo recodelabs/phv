@@ -167,6 +167,10 @@ pub fn topic_of(resource: &Value, observations: &[Value]) -> Option<(&'static st
         "AllergyIntolerance" => simple("Allergies", "allergies"),
         "Immunization" => simple("Vaccines", "vaccines"),
         "DocumentReference" => simple("Documents", "documents"),
+        "ExplanationOfBenefit" => Some((
+            "Claims",
+            format!("claims/{}", encode_segment(&id_of(resource))),
+        )),
         _ => None,
     }
 }

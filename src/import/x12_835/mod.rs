@@ -11,6 +11,7 @@ use crate::error::{Issue, PhvError};
 use crate::source::build_provenance;
 use crate::store::Change;
 use crate::write::{Phv, resource_ref};
+pub use convert::GROUP_CODE;
 use convert::{Links, NPI};
 use parse::{Claim, Person};
 use serde::Serialize;

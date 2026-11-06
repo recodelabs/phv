@@ -60,9 +60,10 @@ async fn page(State(app): State<App>, Path(vault): Path<String>) -> Response {
     .await
 }
 
-fn original_file(cx: &mut Ctx, report_id: &str) -> Result<Option<String>, PageError> {
+/// The link to the file a record came from, when that file is still stored.
+pub(super) fn original_file(cx: &mut Ctx, reference: &str) -> Result<Option<String>, PageError> {
     let provenance = cx.records.of_type("Provenance")?;
-    let Some(source) = source_of(&format!("DiagnosticReport/{report_id}"), &provenance) else {
+    let Some(source) = source_of(reference, &provenance) else {
         return Ok(None);
     };
     let documents = cx.records.of_type("DocumentReference")?;
@@ -82,7 +83,7 @@ async fn report(State(app): State<App>, Path((vault, id)): Path<(String, String)
         let detail = report_detail(&id, &reports, &observations)
             .ok_or_else(|| not_found("No lab report with this id."))?;
         render(ReportPage {
-            original: original_file(cx, &id)?,
+            original: original_file(cx, &format!("DiagnosticReport/{id}"))?,
             chrome: cx.chrome()?,
             detail,
         })

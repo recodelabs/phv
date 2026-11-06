@@ -1,6 +1,7 @@
 //! Routes, GET only. Each topic has its own file with its templates and handlers.
 
 mod activity;
+mod claims;
 mod clinical;
 mod documents;
 mod explorer;
@@ -52,7 +53,7 @@ pub struct Chrome {
     pub unreadable: usize,
 }
 
-const SECTIONS: [(&str, &str); 10] = [
+const SECTIONS: [(&str, &str); 11] = [
     ("Overview", "overview"),
     ("Vitals", "vitals"),
     ("Activity", "activity"),
@@ -61,6 +62,7 @@ const SECTIONS: [(&str, &str); 10] = [
     ("Medicines", "medicines"),
     ("Allergies", "allergies"),
     ("Vaccines", "vaccines"),
+    ("Claims", "claims"),
     ("Documents", "documents"),
     ("All FHIR", "fhir"),
 ];
@@ -225,6 +227,7 @@ pub fn router(vaults: Vaults) -> Router {
         .merge(activity::routes())
         .merge(labs::routes())
         .merge(clinical::routes())
+        .merge(claims::routes())
         .merge(documents::routes())
         .merge(overview::routes())
         .fallback(fallback)
