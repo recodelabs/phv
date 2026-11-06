@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="phv logo: a folder shaped like a shield with a medical cross" width="140">
+</p>
+
 # phv: personal health vault
 
 phv keeps your health records as FHIR R4 files on your own machine. AI can help map your documents to FHIR, while phv itself validates and writes every record. Git is optional and adds history and undo.
@@ -34,6 +38,34 @@ With Git, review changes with `git diff` and commit the ones you accept. Without
 
 To try phv with fake data, see [demo/README.md](demo/README.md).
 
+## What a vault looks like
+
+Each person gets their own vault, a plain folder of files. This is one after adding some records and a document:
+
+```text
+maya/
+├── phv.toml                     # vault format and FHIR version
+├── .gitignore                   # keeps .phv/ out of Git
+├── records/                     # one file per resource type, created as needed
+│   ├── Patient.ndjson           # exactly one person
+│   ├── Observation.ndjson       # lab results, vitals, activity
+│   ├── DiagnosticReport.ndjson
+│   ├── DocumentReference.ndjson # one entry per stored document
+│   ├── Provenance.ndjson        # links records to the document they came from
+│   └── ...
+├── sources/                     # your original files, never changed
+│   └── <sha256>.pdf
+└── .phv/                        # lock and temporary files, safe to delete when phv isn't running
+```
+
+Every `records/` file has one FHIR resource per line, sorted by ID:
+
+```json
+{"resourceType":"Observation","id":"7794f8aa3c537cd7108909de048cb529","code":{"text":"Creatinine"},"status":"final","valueQuantity":{"unit":"mg/dL","value":1.50}}
+```
+
+A change to one record changes one line, so Git diffs stay small. Values are kept exactly as written, so `1.50` stays `1.50`. If you choose Git in `phv setup`, the vault also has a `.git` folder.
+
 ## Add a lab result with Claude
 
 Install the skill, then ask Claude Code to add a lab report:
@@ -46,13 +78,32 @@ Claude stores the original file, maps the results to FHIR and shows you what it 
 
 ## Use a Claude session
 
-`phv setup` prints the command to connect a vault to Claude Code, one server per person:
+`phv mcp` is a local MCP server, so a Claude Code session can store your documents and work with your records. It needs `phv` on your `PATH`. Each server serves one vault, so a session connected for one family member can't touch another's records.
+
+`phv setup` prints the command for each vault. Add `--scope user` to use the vault from any folder:
 
 ```bash
-claude mcp add phv-maya -- phv --vault maya mcp
+claude mcp add --scope user phv-maya -- phv --vault maya mcp
 ```
 
-A session can then store documents, add and correct records, and search the vault. It cannot delete records: use `phv rm` for that. Claude runs on Anthropic's servers, so anything a session reads, including records and documents, goes to Anthropic.
+Start a new Claude Code session, then check that it connected with `/mcp`. You can then ask things like "add this lab report: /path/to/report.pdf" or "what was my last creatinine?". Use a full path for a document.
+
+| Tool | What it does |
+|---|---|
+| `vault_info` | Shows the vault's path and the person's name and birth date |
+| `source_add` | Stores an original document from a full path on this machine |
+| `validate` | Checks a resource or Bundle without writing |
+| `add` | Validates and writes a resource or Bundle |
+| `replace` | Corrects a record, keeping its ID |
+| `get` | Reads one record |
+| `list` | Lists records with an optional FHIRPath filter, 50 by default |
+| `check` | Checks the whole vault |
+
+A session can't delete records: use `phv rm` for that.
+
+**Privacy:** the server runs on your machine, but Claude runs on Anthropic's servers, so anything a session reads, including records and documents, goes to Anthropic.
+
+To stop using a vault in Claude Code, run `claude mcp remove --scope user phv-maya`.
 
 ## Commands
 
