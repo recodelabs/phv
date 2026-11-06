@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Vitals{% endblock %}
 {% block main %}
+{% let vault = &chrome.vault %}
 <h1>Vitals</h1>
 {% if measures.is_empty() %}
 <p>No vitals yet.</p>
@@ -11,7 +12,7 @@
   {% for m in &measures %}
   <tr>
     <td><a href="/v/{{ chrome.vault }}/vitals/{{ m.latest.key_url }}" hx-get="/v/{{ chrome.vault }}/vitals/{{ m.latest.key_url }}" hx-target="#history-{{ loop.index }}">{{ m.latest.name }}</a></td>
-    <td>{% for line in &m.latest.lines %}{{ line }}{% if !loop.last %}<br>{% endif %}{% else %}See FHIR{% endfor %}</td>
+    <td>{% let row = &m.latest %}{% include "result_lines.html" %}</td>
     <td>{{ m.latest.date }}</td>
     <td>{{ m.count }}</td>
   </tr>

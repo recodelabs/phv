@@ -1,7 +1,8 @@
 //! The Documents topic and links between records and their source files.
 
-use super::value::{Dated, date_or_none, id_of, newest_first};
+use super::value::{Dated, date_or_none, encode_segment, id_of, newest_first};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,6 +23,7 @@ pub const CATEGORIES: [(&str, &str); 6] = [
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocRow {
     pub id: String,
+    pub id_url: String,
     pub raw_date: Option<String>,
     pub date: String,
     pub title: String,
@@ -91,8 +93,9 @@ fn records_from(document_id: &str, provenance: &[Value]) -> usize {
     provenance
         .iter()
         .filter(|p| document_entity(p).as_deref() == Some(document_id))
-        .map(|p| targets(p).len())
-        .sum()
+        .flat_map(targets)
+        .collect::<HashSet<&str>>()
+        .len()
 }
 
 fn category_code(document: &Value) -> String {
@@ -173,6 +176,7 @@ pub fn documents(resources: &[Value], provenance: &[Value], vault_root: &Path) -
                     .is_some_and(|hash| source_file(vault_root, hash).is_some()),
                 sha256,
                 record_count: records_from(&id, provenance),
+                id_url: encode_segment(&id),
                 id,
             }
         })

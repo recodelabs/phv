@@ -41,9 +41,14 @@ async fn page(State(app): State<App>, Path(vault): Path<String>) -> Response {
         });
         let mut record_count = 0;
         for name in cx.records.vault().resource_types()? {
-            record_count += cx.records.vault().lines(&name)?.len();
+            record_count += cx.records.of_type(&name)?.len();
         }
-        let document_count = cx.records.vault().lines("DocumentReference")?.len();
+        let document_count = cx
+            .records
+            .of_type("DocumentReference")?
+            .iter()
+            .filter(|d| d["status"] != "entered-in-error")
+            .count();
         render(OverviewPage {
             chrome: cx.chrome()?,
             view,

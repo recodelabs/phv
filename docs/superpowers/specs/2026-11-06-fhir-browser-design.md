@@ -118,8 +118,8 @@ Categories are matched on the code within their standard FHIR code system. The s
 - **Sort order:** by the date's text, then by `id`. This is correct except for times on the same day written with different time zone offsets, which is an accepted limit.
 - **Names:** `code.text`, then the first coding's `display`, then its `code`.
 - **Flags and ranges:** shown only when the record has them. phv never works out on its own whether a result is high or low.
-- **Values with no display rule:** a result with no recognized `value[x]` shows "See FHIR", linking to the record.
-- **Blood pressure:** one `Observation` with systolic (LOINC 8480-6) and diastolic (LOINC 8462-4) components shows as `118/76 mmHg`. Separate systolic and diastolic records stay separate rows.
+- **Values with no display rule:** a result with no recognized `value[x]` shows "See FHIR", linking to the record. On an Overview tile, which is itself a link to the history, it is plain text.
+- **Blood pressure:** one `Observation` with systolic (LOINC 8480-6) and diastolic (LOINC 8462-4) components shows as `118/76 mmHg`. Comparators are kept, and any other components follow on their own lines. Separate systolic and diastolic records stay separate rows.
 - **Other components:** an `Observation` with other components lists each one as a line in its result.
 
 ### Groups
@@ -130,7 +130,7 @@ History pages and "latest" tiles group records by a key: the LOINC code when the
 
 - A record with status `entered-in-error` is left out of the latest tiles, histories, topic lists and Overview. It stays visible under All FHIR.
 - Topic list pages show each record's status. Vaccines marked `not-done` show "Not given".
-- "Active now" on the Overview lists records with status `active` and records with no status, marked "Status not recorded". For conditions and allergies, this reads `clinicalStatus`.
+- "Active now" on the Overview lists records with status `active`, `recurrence` or `relapse`, and records with no status, marked "Status not recorded". For conditions and allergies, this reads `clinicalStatus`, and a record whose `verificationStatus` is `refuted` is left out, though it stays on its topic page.
 
 ### Overview tiles
 

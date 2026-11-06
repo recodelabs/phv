@@ -17,7 +17,7 @@
 {% endif %}
 <h2>Latest lab report</h2>
 {% if let Some(report) = &view.latest_report %}
-<p><a href="/v/{{ chrome.vault }}/labs/reports/{{ report.id }}">{{ report.name }}</a> <span class="muted">· {{ report.date }} · {{ report.result_count }} results</span></p>
+<p><a href="/v/{{ chrome.vault }}/labs/reports/{{ report.id_url }}">{{ report.name }}</a> <span class="muted">· {{ report.date }} · {{ report.result_count }} results</span></p>
 {% else %}
 <p>No labs yet.</p>
 {% endif %}

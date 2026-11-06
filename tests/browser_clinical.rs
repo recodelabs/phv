@@ -124,3 +124,26 @@ async fn an_empty_list_says_so() {
             .contains("No documents yet.")
     );
 }
+
+#[test]
+fn a_refuted_diagnosis_is_never_active_now() {
+    let rows = conditions(&[json!({
+        "id": "c", "code": {"text": "Ruled out"},
+        "clinicalStatus": {"coding": [{"code": "active"}]},
+        "verificationStatus": {"coding": [{"code": "refuted"}]}
+    })]);
+    assert_eq!(rows.len(), 1, "it stays on the Conditions page");
+    assert!(active_now(&rows).is_empty());
+}
+
+#[test]
+fn recurrence_relapse_and_status_text_count_as_active() {
+    for status in [
+        json!({"coding": [{"code": "recurrence"}]}),
+        json!({"coding": [{"code": "relapse"}]}),
+        json!({"text": "Active"}),
+    ] {
+        let rows = conditions(&[json!({"id": "c", "clinicalStatus": status})]);
+        assert_eq!(active_now(&rows).len(), 1, "{status}");
+    }
+}

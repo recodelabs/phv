@@ -226,6 +226,6 @@ pub fn router(vaults: Vaults) -> Router {
         .merge(overview::routes())
         .fallback(fallback)
         .with_state(app)
-        .layer(middleware::from_fn(guard::headers))
         .layer(middleware::from_fn(guard::local_only))
+        .layer(middleware::from_fn(guard::headers))
 }

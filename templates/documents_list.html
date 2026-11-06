@@ -14,7 +14,7 @@
     <td>
       {% if row.has_file %}{% if let Some(hash) = &row.sha256 %}<a href="/v/{{ vault }}/sources/{{ hash }}">{{ row.title }}</a>{% endif %}
       {% else %}{{ row.title }} <span class="muted">No file stored</span>{% endif %}
-      · <a class="muted" href="/v/{{ vault }}/fhir/DocumentReference/{{ row.id }}">FHIR</a>
+      · <a class="muted" href="/v/{{ vault }}/fhir/DocumentReference/{{ row.id_url }}">FHIR</a>
     </td>
     <td>{{ row.category_label }}</td>
     <td>{{ row.record_count }}</td>

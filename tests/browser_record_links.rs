@@ -41,3 +41,45 @@ async fn a_record_with_no_topic_or_source_leaves_them_out() {
     assert!(!html.contains("Shown under"));
     assert!(!html.contains("Added by"));
 }
+
+#[test]
+fn a_record_entered_in_error_claims_no_topic() {
+    let observations = fixture("Observation");
+    let lab = serde_json::json!({
+        "resourceType": "DiagnosticReport", "id": "r", "status": "entered-in-error",
+        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/v2-0074", "code": "LAB"}]}]
+    });
+    assert_eq!(topic_of(&lab, &observations), None);
+    let wrong = observations
+        .iter()
+        .find(|o| o["id"] == "vital-weight-error")
+        .unwrap();
+    assert_eq!(topic_of(wrong, &observations), None);
+    let condition = fixture("Condition");
+    let retracted = condition
+        .iter()
+        .find(|c| c["id"] == "condition-error")
+        .unwrap();
+    assert_eq!(topic_of(retracted, &observations), None);
+}
+
+#[tokio::test]
+async fn a_source_link_uses_the_files_title_even_when_the_document_has_a_type() {
+    let dir = tempfile::tempdir().unwrap();
+    browser_common::copy_fixture(dir.path());
+    let path = dir.path().join("records/DocumentReference.ndjson");
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        text.replace(
+            r#""status":"current","#,
+            r#""status":"current","type":{"text":"Report"},"#,
+        ),
+    )
+    .unwrap();
+    let app = phv::browser::router(phv::browser::Vaults::single(dir.path().to_path_buf()));
+    let html = get(&app, "/v/vault/fhir/Observation/lab-glucose-2026")
+        .await
+        .text();
+    assert!(html.contains("metabolic-panel.pdf"), "{html}");
+}

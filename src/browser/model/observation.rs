@@ -9,6 +9,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObsRow {
     pub id: String,
+    pub id_url: String,
     pub raw_date: Option<String>,
     pub date: String,
     pub name: String,
@@ -77,6 +78,7 @@ pub fn obs_row(observation: &Value) -> ObsRow {
     let key = group_key(observation);
     ObsRow {
         id: id_of(observation),
+        id_url: encode_segment(&id_of(observation)),
         date: date_or_none(raw_date.as_deref()),
         raw_date,
         name: concept_name(&observation["code"]).unwrap_or_else(|| "Unnamed".into()),

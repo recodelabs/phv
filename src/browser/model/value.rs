@@ -81,6 +81,15 @@ pub fn value_text(holder: &Value) -> Option<String> {
     number_text(&holder["valueInteger"])
 }
 
+fn is_pressure_part(component: &Value) -> bool {
+    has_code(&component["code"], LOINC, SYSTOLIC) || has_code(&component["code"], LOINC, DIASTOLIC)
+}
+
+fn pressure_reading(quantity: &Value) -> Option<String> {
+    let comparator = quantity["comparator"].as_str().unwrap_or("");
+    Some(format!("{comparator}{}", number_text(&quantity["value"])?))
+}
+
 fn blood_pressure(components: &[Value]) -> Option<String> {
     let find = |code: &str| {
         components
@@ -89,10 +98,10 @@ fn blood_pressure(components: &[Value]) -> Option<String> {
             .map(|c| &c["valueQuantity"])
     };
     let systolic = find(SYSTOLIC)?;
-    let diastolic = find(DIASTOLIC)?;
-    let top = number_text(&systolic["value"])?;
-    let bottom = number_text(&diastolic["value"])?;
-    Some(match systolic["unit"].as_str() {
+    let top = pressure_reading(systolic)?;
+    let bottom = pressure_reading(find(DIASTOLIC)?)?;
+    let unit = systolic["unit"].as_str().or(systolic["code"].as_str());
+    Some(match unit {
         Some(unit) => format!("{top}/{bottom} {unit}"),
         None => format!("{top}/{bottom}"),
     })
@@ -104,11 +113,13 @@ pub fn result_lines(observation: &Value) -> Vec<String> {
     let Some(components) = observation["component"].as_array() else {
         return lines;
     };
-    if let Some(pressure) = blood_pressure(components) {
-        lines.push(pressure);
-        return lines;
-    }
+    let pressure = blood_pressure(components);
+    let has_pressure = pressure.is_some();
+    lines.extend(pressure);
     for component in components {
+        if has_pressure && is_pressure_part(component) {
+            continue;
+        }
         let name = concept_name(&component["code"]).unwrap_or_else(|| "Unnamed".into());
         let value = value_text(component).unwrap_or_else(|| "See FHIR".into());
         lines.push(format!("{name}: {value}"));

@@ -6,8 +6,8 @@ use crate::browser::model::explorer::{
     RecordRow, RefRow, TypeCount, label_of, page_count, page_of, pretty_json, record_row,
     references, topic_of,
 };
-use crate::browser::model::parse_resource;
-use crate::browser::model::value::id_of;
+use crate::browser::model::value::{encode_segment, id_of};
+use crate::refs::{collect_refs, local_target};
 use askama::Template;
 use axum::{
     Router,
@@ -16,6 +16,8 @@ use axum::{
     routing::get,
 };
 use serde::Deserialize;
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Template)]
 #[template(path = "fhir_types.html")]
@@ -56,7 +58,7 @@ struct RecordPage {
 
 #[derive(Deserialize)]
 struct PageQuery {
-    page: Option<usize>,
+    page: Option<String>,
 }
 
 fn known_type(cx: &Ctx, resource_type: &str) -> Result<(), PageError> {
@@ -99,7 +101,11 @@ async fn list(
         known_type(cx, &resource_type)?;
         let resources = cx.records.of_type(&resource_type)?;
         let rows: Vec<RecordRow> = resources.iter().map(record_row).collect();
-        let page = query.page.unwrap_or(1).max(1);
+        let page = query
+            .page
+            .and_then(|page| page.parse::<usize>().ok())
+            .unwrap_or(1)
+            .max(1);
         render(ListPage {
             chrome: cx.chrome()?,
             total: rows.len(),
@@ -124,11 +130,27 @@ fn source_link(cx: &mut Ctx, reference: &str) -> Result<Option<SourceLink>, Page
         href: document.map(|_| {
             format!(
                 "/v/{}/fhir/DocumentReference/{}",
-                cx.vault_name, source.document_id
+                cx.vault_name,
+                encode_segment(&source.document_id)
             )
         }),
         agent: source.agent,
     }))
+}
+
+/// The ids of every type this record refers to, so each file is read once.
+fn known_ids(cx: &mut Ctx, resource: &Value) -> HashMap<String, HashSet<String>> {
+    let mut known: HashMap<String, HashSet<String>> = HashMap::new();
+    for reference in collect_refs(resource) {
+        let Some((kind, _)) = local_target(&reference) else {
+            continue;
+        };
+        if !known.contains_key(kind) {
+            let ids = cx.records.of_type(kind).unwrap_or_default();
+            known.insert(kind.to_string(), ids.iter().map(id_of).collect());
+        }
+    }
+    known
 }
 
 async fn record(
@@ -137,22 +159,21 @@ async fn record(
 ) -> Response {
     run(app, vault, "fhir", move |cx| {
         known_type(cx, &resource_type)?;
-        let line = cx
+        let resource = cx
             .records
-            .vault()
-            .get(&resource_type, &id)?
+            .of_type(&resource_type)?
+            .into_iter()
+            .find(|r| id_of(r) == id)
             .ok_or_else(|| not_found(format!("No {resource_type} with this id.")))?;
-        let resource = parse_resource(&line, &resource_type)
-            .ok_or_else(|| not_found("This record could not be read. Run phv check."))?;
         let observations = cx.records.of_type("Observation")?;
-        let vault_ref = cx.records.vault().clone();
+        let known = known_ids(cx, &resource);
         let source = source_link(cx, &format!("{resource_type}/{id}"))?;
         render(RecordPage {
             chrome: cx.chrome()?,
             label: label_of(&resource),
             json: pretty_json(&resource),
             references: references(&resource, |kind, target| {
-                vault_ref.get(kind, target).is_ok_and(|line| line.is_some())
+                known.get(kind).is_some_and(|ids| ids.contains(target))
             }),
             topic: topic_of(&resource, &observations),
             source,

@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--vault" => vault = args.next().map(PathBuf::from),
+            "--vault" => vault = Some(args.next().ok_or("--vault needs a value")?.into()),
             "--port" => port = args.next().ok_or("--port needs a value")?.parse()?,
             other => return Err(format!("unknown argument: {other}").into()),
         }

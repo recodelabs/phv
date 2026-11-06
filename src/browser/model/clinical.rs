@@ -1,6 +1,8 @@
 //! Conditions, medicines, allergies and vaccines as simple lists.
 
-use super::value::{Dated, capitalized, concept_name, date_or_none, id_of, newest_first};
+use super::value::{
+    Dated, capitalized, concept_name, date_or_none, encode_segment, id_of, newest_first,
+};
 use crate::refs::local_target;
 use serde_json::Value;
 
@@ -10,6 +12,7 @@ const STATUS_NOT_RECORDED: &str = "Status not recorded";
 pub struct ClinicalRow {
     pub resource_type: String,
     pub id: String,
+    pub id_url: String,
     pub raw_date: Option<String>,
     pub date: String,
     pub name: String,
@@ -51,17 +54,31 @@ fn dated_row(
     ClinicalRow {
         resource_type: resource["resourceType"].as_str().unwrap_or("").to_string(),
         id: id_of(resource),
+        id_url: encode_segment(&id_of(resource)),
         date: date_or_none(raw_date.as_deref()),
         raw_date,
         name,
-        active_now: can_be_active && status.as_deref().is_none_or(|s| s == "active"),
+        active_now: can_be_active && status.as_deref().is_none_or(means_active),
         status: status.map_or_else(|| STATUS_NOT_RECORDED.to_string(), |s| capitalized(&s)),
         detail,
     }
 }
 
-fn verified_in_error(resource: &Value) -> bool {
+/// `recurrence` and `relapse` are kinds of `active` in FHIR's condition status hierarchy.
+fn means_active(status: &str) -> bool {
+    matches!(
+        status.to_ascii_lowercase().as_str(),
+        "active" | "recurrence" | "relapse"
+    )
+}
+
+pub fn verified_in_error(resource: &Value) -> bool {
     concept_code(&resource["verificationStatus"]).as_deref() == Some("entered-in-error")
+}
+
+/// A diagnosis or allergy that was ruled out is never active, whatever its status says.
+fn not_refuted(resource: &Value) -> bool {
+    concept_code(&resource["verificationStatus"]).as_deref() != Some("refuted")
 }
 
 pub fn conditions(resources: &[Value]) -> Vec<ClinicalRow> {
@@ -79,7 +96,7 @@ pub fn conditions(resources: &[Value]) -> Vec<ClinicalRow> {
                 concept_name(&r["code"]).unwrap_or_else(|| "Unnamed condition".into()),
                 concept_code(&r["clinicalStatus"]),
                 None,
-                true,
+                not_refuted(r),
             )
         })
         .collect();
@@ -105,7 +122,7 @@ pub fn allergies(resources: &[Value]) -> Vec<ClinicalRow> {
                 concept_name(&r["code"]).unwrap_or_else(|| "Unnamed allergy".into()),
                 concept_code(&r["clinicalStatus"]),
                 (!reactions.is_empty()).then(|| reactions.join(", ")),
-                true,
+                not_refuted(r),
             )
         })
         .collect();

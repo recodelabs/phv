@@ -111,3 +111,18 @@ fn segments_are_percent_encoded() {
     assert_eq!(encode_segment("text:A/B c"), "text%3AA%2FB%20c");
     assert_eq!(encode_segment("a-b.c_d~1"), "a-b.c_d~1");
 }
+
+#[test]
+fn blood_pressure_keeps_comparators_the_unit_code_and_other_components() {
+    let observation = parsed(
+        r#"{"component":[
+        {"code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]},"valueQuantity":{"value":90,"comparator":"<","code":"mm[Hg]"}},
+        {"code":{"coding":[{"system":"http://loinc.org","code":"8462-4"}]},"valueQuantity":{"value":60,"code":"mm[Hg]"}},
+        {"code":{"text":"Mean pressure"},"valueQuantity":{"value":70,"unit":"mmHg"}}
+    ]}"#,
+    );
+    assert_eq!(
+        result_lines(&observation),
+        ["<90/60 mm[Hg]", "Mean pressure: 70 mmHg"]
+    );
+}

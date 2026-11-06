@@ -1,11 +1,11 @@
 //! Labs pages.
 
 use super::{App, Chrome, Ctx, PageError, not_found, render, run, wants_partial};
-use crate::browser::model::documents::{sha256_of, source_of};
+use crate::browser::model::documents::{sha256_of, source_file, source_of};
 use crate::browser::model::labs::{
     ReportDetail, ReportRow, lab_reports, report_detail, results_not_in_a_report, test_history,
 };
-use crate::browser::model::observation::ObsRow;
+use crate::browser::model::observation::{ObsRow, is_entered_in_error};
 use crate::browser::model::value::id_of;
 use askama::Template;
 use axum::{
@@ -35,6 +35,7 @@ struct ReportPage {
 #[derive(Template)]
 #[template(path = "history_table.html")]
 struct HistoryPartial {
+    vault: String,
     rows: Vec<ObsRow>,
 }
 
@@ -65,10 +66,12 @@ fn original_file(cx: &mut Ctx, report_id: &str) -> Result<Option<String>, PageEr
         return Ok(None);
     };
     let documents = cx.records.of_type("DocumentReference")?;
+    let root = cx.records.vault().root();
     Ok(documents
         .iter()
-        .find(|d| id_of(d) == source.document_id)
+        .find(|d| id_of(d) == source.document_id && !is_entered_in_error(d))
         .and_then(sha256_of)
+        .filter(|hash| source_file(root, hash).is_some())
         .map(|hash| format!("/v/{}/sources/{hash}", cx.vault_name)))
 }
 
@@ -102,7 +105,10 @@ async fn test(
             .name
             .clone();
         if wants_partial(&headers) {
-            return render(HistoryPartial { rows });
+            return render(HistoryPartial {
+                vault: cx.vault_name.clone(),
+                rows,
+            });
         }
         render(TestPage {
             chrome: cx.chrome()?,

@@ -180,3 +180,14 @@ async fn bad_or_unknown_hashes_are_404() {
         assert_eq!(get(&app, &uri).await.status, StatusCode::NOT_FOUND, "{uri}");
     }
 }
+
+#[test]
+fn a_record_named_by_two_provenances_counts_once() {
+    let documents_input = [json!({"id": "d", "status": "current"})];
+    let provenance = [
+        json!({"target": [{"reference": "Observation/a"}], "entity": [{"what": {"reference": "DocumentReference/d"}}]}),
+        json!({"target": [{"reference": "Observation/a"}, {"reference": "Observation/b"}], "entity": [{"what": {"reference": "DocumentReference/d"}}]}),
+    ];
+    let rows = documents(&documents_input, &provenance, &fixture_path());
+    assert_eq!(rows[0].record_count, 2);
+}

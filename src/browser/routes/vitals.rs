@@ -22,6 +22,7 @@ struct VitalsPage {
 #[derive(Template)]
 #[template(path = "history_table.html")]
 struct HistoryPartial {
+    vault: String,
     rows: Vec<ObsRow>,
 }
 
@@ -59,7 +60,10 @@ async fn measure(
             .name
             .clone();
         if wants_partial(&headers) {
-            return render(HistoryPartial { rows });
+            return render(HistoryPartial {
+                vault: cx.vault_name.clone(),
+                rows,
+            });
         }
         render(HistoryPage {
             chrome: cx.chrome()?,

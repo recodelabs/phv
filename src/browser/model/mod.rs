@@ -37,8 +37,9 @@ impl Records {
     pub fn of_type(&mut self, resource_type: &str) -> Result<Vec<Value>, PhvError> {
         let mut resources = Vec::new();
         let mut bad = 0;
-        for line in self.vault.lines(resource_type)? {
-            match parse_resource(&line, resource_type) {
+        for line in self.vault.raw_lines(resource_type)? {
+            let text = std::str::from_utf8(&line).ok();
+            match text.and_then(|line| parse_resource(line, resource_type)) {
                 Some(resource) => resources.push(resource),
                 None => bad += 1,
             }

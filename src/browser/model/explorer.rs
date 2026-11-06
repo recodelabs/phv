@@ -1,7 +1,8 @@
 //! All FHIR: every record of every type, and the topic page that shows each one.
 
+use super::clinical::verified_in_error;
 use super::labs::{is_lab_observation, is_lab_report};
-use super::observation::clinical_date;
+use super::observation::{clinical_date, is_entered_in_error};
 use super::value::{concept_name, encode_segment, friendly_date, id_of};
 use super::vitals::is_vital;
 use crate::refs::{collect_refs, local_target};
@@ -32,13 +33,13 @@ pub struct RefRow {
 
 /// A short label for a record of any type, or an empty string.
 pub fn label_of(resource: &Value) -> String {
+    if let Some(title) = resource["content"][0]["attachment"]["title"].as_str() {
+        return title.to_string();
+    }
     for key in ["code", "vaccineCode", "medicationCodeableConcept", "type"] {
         if let Some(name) = concept_name(&resource[key]) {
             return name;
         }
-    }
-    if let Some(title) = resource["content"][0]["attachment"]["title"].as_str() {
-        return title.to_string();
     }
     if let Some(name) = patient_name(resource) {
         return name;
@@ -109,6 +110,9 @@ pub fn references(resource: &Value, exists: impl Fn(&str, &str) -> bool) -> Vec<
 
 /// The topic page a record shows up under, as a label and a path below the vault.
 pub fn topic_of(resource: &Value, observations: &[Value]) -> Option<(&'static str, String)> {
+    if is_entered_in_error(resource) || verified_in_error(resource) {
+        return None;
+    }
     let simple = |label, path: &str| Some((label, path.to_string()));
     match resource["resourceType"].as_str()? {
         "Observation" if is_vital(resource) => simple("Vitals", "vitals"),

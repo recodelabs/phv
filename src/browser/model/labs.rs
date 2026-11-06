@@ -2,8 +2,8 @@
 
 use super::observation::{ObsRow, clinical_date, is_entered_in_error, obs_row};
 use super::value::{
-    DIAGNOSTIC_SERVICE, Dated, OBSERVATION_CATEGORY, concept_name, date_or_none, has_code, id_of,
-    newest_first,
+    DIAGNOSTIC_SERVICE, Dated, OBSERVATION_CATEGORY, concept_name, date_or_none, encode_segment,
+    has_code, id_of, newest_first,
 };
 use crate::refs::local_target;
 use serde_json::Value;
@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReportRow {
     pub id: String,
+    pub id_url: String,
     pub raw_date: Option<String>,
     pub date: String,
     pub name: String,
@@ -74,15 +75,22 @@ pub fn is_lab_report(report: &Value, observations: &[Value]) -> bool {
     })
 }
 
-fn report_row(report: &Value) -> ReportRow {
+fn report_row(report: &Value, observations: &[Value]) -> ReportRow {
     let raw_date = clinical_date(report);
+    let index = by_id(observations);
+    let shown = result_ids(report)
+        .iter()
+        .filter_map(|reference| observation_id(reference).and_then(|id| index.get(id)))
+        .filter(|observation| !is_entered_in_error(observation))
+        .count();
     ReportRow {
         id: id_of(report),
+        id_url: encode_segment(&id_of(report)),
         date: date_or_none(raw_date.as_deref()),
         raw_date,
         name: concept_name(&report["code"]).unwrap_or_else(|| "Unnamed report".into()),
         status: report["status"].as_str().unwrap_or("").to_string(),
-        result_count: result_ids(report).len(),
+        result_count: shown,
     }
 }
 
@@ -91,7 +99,7 @@ pub fn lab_reports(reports: &[Value], observations: &[Value]) -> Vec<ReportRow> 
     let mut rows: Vec<ReportRow> = reports
         .iter()
         .filter(|r| !is_entered_in_error(r) && is_lab_report(r, observations))
-        .map(report_row)
+        .map(|report| report_row(report, observations))
         .collect();
     newest_first(&mut rows);
     rows
@@ -113,7 +121,7 @@ pub fn report_detail(id: &str, reports: &[Value], observations: &[Value]) -> Opt
         }
     }
     Some(ReportDetail {
-        report: report_row(report),
+        report: report_row(report, observations),
         results,
         missing,
     })
@@ -122,7 +130,7 @@ pub fn report_detail(id: &str, reports: &[Value], observations: &[Value]) -> Opt
 fn referenced_by_lab_reports(reports: &[Value], observations: &[Value]) -> HashSet<String> {
     reports
         .iter()
-        .filter(|r| is_lab_report(r, observations))
+        .filter(|r| !is_entered_in_error(r) && is_lab_report(r, observations))
         .flat_map(result_ids)
         .filter_map(|reference| observation_id(&reference).map(str::to_string))
         .collect()

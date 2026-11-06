@@ -273,3 +273,65 @@ fn pages_hold_two_hundred_records() {
     assert_eq!(page_count(450), 3);
     assert_eq!(page_count(0), 1);
 }
+
+#[tokio::test]
+async fn a_rejected_request_still_gets_the_safety_headers() {
+    let request = axum::http::Request::builder()
+        .uri("/v/vault/fhir")
+        .header("host", "evil.example")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = tower::ServiceExt::oneshot(app(), request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+}
+
+#[tokio::test]
+async fn a_bad_byte_costs_one_line_not_the_page() {
+    let dir = tempfile::tempdir().unwrap();
+    copy_fixture(dir.path());
+    let path = dir.path().join("records/Condition.ndjson");
+    let mut bytes = fs::read(&path).unwrap();
+    bytes.extend_from_slice(b"{\"resourceType\":\"Condition\",\"id\":\"zz\xff\"}\n");
+    fs::write(&path, bytes).unwrap();
+    let app = router(Vaults::single(dir.path().to_path_buf()));
+    let reply = get(&app, "/v/vault/conditions").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert!(
+        reply.text().contains("1 records couldn"),
+        "{}",
+        reply.text()
+    );
+    assert!(reply.text().contains("Asthma"));
+    let record = get(&app, "/v/vault/fhir/Condition/condition-asthma").await;
+    assert_eq!(record.status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_line_in_another_key_order_can_still_be_opened() {
+    let dir = tempfile::tempdir().unwrap();
+    copy_fixture(dir.path());
+    let path = dir.path().join("records/Encounter.ndjson");
+    fs::write(&path, "{\"id\":\"e\",\"resourceType\":\"Encounter\",\"subject\":{\"reference\":\"Patient/patient-maya\"}}\n").unwrap();
+    let app = router(Vaults::single(dir.path().to_path_buf()));
+    let reply = get(&app, "/v/vault/fhir/Encounter/e").await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert!(
+        reply
+            .text()
+            .contains(r#"href="/v/vault/fhir/Patient/patient-maya""#)
+    );
+}
+
+#[tokio::test]
+async fn a_page_number_that_is_not_a_number_means_the_first_page() {
+    let app = app();
+    for uri in [
+        "/v/vault/fhir/Condition?page=abc",
+        "/v/vault/fhir/Condition?page=",
+    ] {
+        let reply = get(&app, uri).await;
+        assert_eq!(reply.status, StatusCode::OK, "{uri}");
+    }
+}

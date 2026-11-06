@@ -157,3 +157,63 @@ async fn unknown_reports_and_tests_are_404() {
         assert_eq!(get(&app, uri).await.status, StatusCode::NOT_FOUND, "{uri}");
     }
 }
+
+#[test]
+fn a_result_referenced_only_by_a_retracted_report_stays_visible() {
+    let lab = json!({"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory"}]});
+    let observations = [
+        json!({"resourceType": "Observation", "id": "o", "status": "final", "category": [lab], "code": {"text": "Iron"}, "valueString": "Fine"}),
+    ];
+    let reports = [
+        json!({"resourceType": "DiagnosticReport", "id": "r", "status": "entered-in-error", "result": [{"reference": "Observation/o"}]}),
+    ];
+    assert!(lab_reports(&reports, &observations).is_empty());
+    let loose = results_not_in_a_report(&reports, &observations);
+    assert_eq!(loose.len(), 1);
+}
+
+#[test]
+fn a_reports_result_count_leaves_out_results_that_will_not_be_shown() {
+    let lab = json!({"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory"}]});
+    let observations = [
+        json!({"id": "good", "status": "final", "category": [lab]}),
+        json!({"id": "bad", "status": "entered-in-error", "category": [lab]}),
+    ];
+    let reports = [json!({"id": "r", "status": "final", "result": [
+        {"reference": "Observation/good"}, {"reference": "Observation/bad"}, {"reference": "Observation/gone"}
+    ]})];
+    assert_eq!(lab_reports(&reports, &observations)[0].result_count, 1);
+}
+
+#[tokio::test]
+async fn no_original_file_link_when_the_file_is_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    browser_common::copy_fixture(dir.path());
+    std::fs::remove_file(
+        dir.path()
+            .join("sources/1bb0ff96726fa961b697cbb7a3c9cf60d8b28c451054a3d044ba9095d4a0d412.pdf"),
+    )
+    .unwrap();
+    let app = phv::browser::router(phv::browser::Vaults::single(dir.path().to_path_buf()));
+    let html = get(&app, "/v/vault/labs/reports/report-2026").await.text();
+    assert!(!html.contains("Original file"), "{html}");
+}
+
+#[tokio::test]
+async fn a_result_with_no_display_rule_links_to_its_record() {
+    let dir = tempfile::tempdir().unwrap();
+    browser_common::copy_fixture(dir.path());
+    let path = dir.path().join("records/Observation.ndjson");
+    let mut text = std::fs::read_to_string(&path).unwrap();
+    text.push_str(r#"{"resourceType":"Observation","id":"z-ratio","category":[{"coding":[{"code":"laboratory","system":"http://terminology.hl7.org/CodeSystem/observation-category"}]}],"code":{"text":"Titer"},"status":"final","valueRatio":{}}
+"#);
+    std::fs::write(&path, text).unwrap();
+    let app = phv::browser::router(phv::browser::Vaults::single(dir.path().to_path_buf()));
+    for uri in ["/v/vault/labs", "/v/vault/labs/tests/text%3ATiter"] {
+        let html = get(&app, uri).await.text();
+        assert!(
+            html.contains(r#"<a href="/v/vault/fhir/Observation/z-ratio">See FHIR</a>"#),
+            "{uri}\n{html}"
+        );
+    }
+}

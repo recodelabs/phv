@@ -63,3 +63,18 @@ async fn a_vault_with_no_patient_falls_back_to_its_name() {
     assert!(html.contains("<h1>vault</h1>"));
     assert!(html.contains("No vitals yet."));
 }
+
+#[tokio::test]
+async fn counts_match_the_other_pages_and_notice_unreadable_lines() {
+    let dir = tempfile::tempdir().unwrap();
+    browser_common::copy_fixture(dir.path());
+    let path = dir.path().join("records/DocumentReference.ndjson");
+    let mut text = std::fs::read_to_string(&path).unwrap();
+    text.push_str("{not json\n");
+    text.push_str("{\"resourceType\":\"DocumentReference\",\"id\":\"zz\",\"status\":\"entered-in-error\",\"content\":[]}\n");
+    std::fs::write(&path, text).unwrap();
+    let app = phv::browser::router(phv::browser::Vaults::single(dir.path().to_path_buf()));
+    let html = get(&app, "/v/vault/overview").await.text();
+    assert!(html.contains("3 documents"), "{html}");
+    assert!(html.contains("1 records couldn"), "{html}");
+}
