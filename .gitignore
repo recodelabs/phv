@@ -8,3 +8,6 @@
 /records/
 /sources/
 /phv.toml
+
+# Local git worktrees
+/.worktrees/
