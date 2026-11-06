@@ -315,7 +315,7 @@ These came from reviewing the design against the HealthKit export app in `health
 - **What goes where:** clinical records belong in `records/`. Daily rollups and raw samples outside `records/` apply to wearables.
 - **Submissions:** submit one source at a time, because FHIR IDs are only unique per type and source. Validate each record and write the good ones, because one bad record rejects a whole submission.
 - **References:** point `Patient` references at the vault's Patient, and stop if there is none. Keep references between records in the file. Make other relative references absolute using `sourceURL`, since HealthKit has no Practitioner, Encounter, Organization or Medication resources.
-- **Other record rules:** skip and report DSTU2 records, which stay in `sources/`. Set an identifier (source, type, original ID) and `meta.source`.
+- **Other record rules:** skip and report DSTU2 records, which stay in `sources/`. Identify the version from `fhirVersion` on the export line, not by inspecting fields. Set an identifier (source, type, original ID) and `meta.source`.
 - **Activity:** one Observation per day for steps, probably LOINC 41950-7 (confirm the code), keyed on date. Workouts as Observation, keyed on the HealthKit UUID, which is a judgment call to confirm.
 - **Tests:** cover Coverage, MedicationRequest, MedicationDispense and Procedure.
 - **Seen so far:** Apple's simulator sample records are all DSTU2, so a fixture needs R4 records too, and no R4 from HealthKit has been seen yet. `sourceURL` looks like `<base>/<Type>/<id>` but may be null. All references are relative, to Patient, Encounter and Practitioner resources that are not in the export. Real hospital records are untested.
