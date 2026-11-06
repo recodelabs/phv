@@ -6,8 +6,9 @@ mod convert;
 mod export;
 mod triage;
 
-use crate::canon::canon_resource;
+use crate::canon::{canon_resource, parse_json};
 use crate::error::{Issue, PhvError};
+use crate::refs::collect_refs;
 use crate::store::{Change, line_id};
 use crate::write::Phv;
 use convert::{MEASURE_CODES, WORKOUT_MEASURE_SYSTEM};
@@ -55,6 +56,39 @@ pub struct TimeZoneHold {
     pub exported_time_zone: String,
 }
 
+/// A stored day or workout kept because this file is older than the newest export in the
+/// vault, so its values would have gone backwards.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OlderExportHold {
+    /// `day` or `workout`.
+    pub kind: String,
+    /// The date or UUID.
+    pub key: String,
+    pub file_through: String,
+    pub vault_through: String,
+}
+
+/// A stored day or workout kept because it was replaced by hand, which leaves it without
+/// the tag that says which export row it came from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EditedHold {
+    /// `day` or `workout`.
+    pub kind: String,
+    /// The date or UUID.
+    pub key: String,
+}
+
+/// A measure a changed workout no longer has, kept because another record references it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct KeptMember {
+    pub workout: String,
+    /// `Observation/<id>`.
+    pub member: String,
+    /// The LOINC code of the measure.
+    pub measure: String,
+    pub referenced_by: Vec<String>,
+}
+
 /// A workout skipped because another source recorded the same session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Overlap {
@@ -77,6 +111,9 @@ pub struct ImportReport {
     pub conflicts: Vec<String>,
     pub changed_days: Vec<String>,
     pub other_time_zone: Vec<TimeZoneHold>,
+    pub older_export: Vec<OlderExportHold>,
+    pub edited_since_import: Vec<EditedHold>,
+    pub kept_members: Vec<KeptMember>,
     pub overlaps: Vec<Overlap>,
     pub rejected: Vec<Rejected>,
     pub export_failures: Vec<Value>,
@@ -112,16 +149,20 @@ impl Phv {
             duplicates_in_file: triage.duplicates_in_file,
             conflicts: triage.conflicts,
             other_time_zone: triage.other_time_zone,
+            older_export: triage.older_export,
+            edited_since_import: triage.edited_since_import,
             overlaps: triage.overlaps,
             rejected: export.rejected,
             export_failures: export.failures,
             ..ImportReport::default()
         };
 
+        let through = export.through.map(|date| date.to_string());
+        let through = through.as_deref();
         let mut resources = Vec::new();
-        let mut removals = Vec::new();
+        let mut stale = Vec::new();
         for (day, action) in &triage.days {
-            let converted = vec![convert::day(day, &patient)];
+            let converted = vec![convert::day(day, &patient, through)];
             if self.keep_valid(&day.date, &converted, &mut report).await {
                 report.daily_steps.count(*action);
                 if *action == Action::Changed {
@@ -131,14 +172,14 @@ impl Phv {
             }
         }
         for (workout, action) in &triage.workouts {
-            let converted = convert::workout(workout, &patient);
+            let converted = convert::workout(workout, &patient, through);
             if self
                 .keep_valid(&workout.uuid, &converted, &mut report)
                 .await
             {
                 report.workouts.count(*action);
                 if *action == Action::Changed {
-                    removals.extend(stale_members(&workout.uuid, &converted));
+                    stale.extend(stale_members(&workout.uuid, &converted));
                 }
                 resources.extend(converted);
             }
@@ -148,6 +189,8 @@ impl Phv {
         if !reference_issues.is_empty() {
             return Err(PhvError::Conflict(reference_issues));
         }
+        let (removals, kept) = self.removable(stale, &resources)?;
+        report.kept_members = kept;
 
         let mut changes: Vec<Change> = resources
             .iter()
@@ -211,15 +254,101 @@ impl Phv {
     }
 }
 
-/// Removals for the measures a changed workout no longer has.
-fn stale_members(uuid: &str, converted: &[Value]) -> Vec<Change> {
+/// A measure a changed workout no longer has.
+struct StaleMember {
+    workout: String,
+    measure: &'static str,
+    id: String,
+}
+
+/// The measures a changed workout no longer has.
+fn stale_members(uuid: &str, converted: &[Value]) -> Vec<StaleMember> {
     MEASURE_CODES
         .iter()
-        .map(|code| convert::stable_id(WORKOUT_MEASURE_SYSTEM, &convert::member_key(uuid, code)))
-        .filter(|id| !converted.iter().any(|r| r["id"] == id.as_str()))
-        .map(|id| Change::Remove {
-            resource_type: "Observation".into(),
-            id,
+        .map(|&measure| StaleMember {
+            workout: uuid.to_string(),
+            measure,
+            id: convert::stable_id(WORKOUT_MEASURE_SYSTEM, &convert::member_key(uuid, measure)),
         })
+        .filter(|member| !converted.iter().any(|r| r["id"] == member.id.as_str()))
         .collect()
+}
+
+impl Phv {
+    /// Splits stale members into removals and the ones another record references, which
+    /// stay, as `phv rm` would refuse to remove them. The stored copies of `written`
+    /// are ignored, since the import is replacing them: a changed panel stops listing
+    /// the members it drops.
+    fn removable(
+        &self,
+        stale: Vec<StaleMember>,
+        written: &[Value],
+    ) -> Result<(Vec<Change>, Vec<KeptMember>), PhvError> {
+        // A member that is not stored cannot be referenced from a valid vault.
+        let mut stored = Vec::new();
+        let mut absent = Vec::new();
+        for member in stale {
+            if self.vault().get("Observation", &member.id)?.is_some() {
+                stored.push(member);
+            } else {
+                absent.push(member);
+            }
+        }
+
+        let mut users: Vec<Vec<String>> = vec![Vec::new(); stored.len()];
+        if !stored.is_empty() {
+            let replaced: Vec<&str> = written.iter().filter_map(|r| r["id"].as_str()).collect();
+            for resource_type in self.vault().resource_types()? {
+                for (position, line) in self.vault().lines(&resource_type)?.iter().enumerate() {
+                    // Cheap test first: any reference to a member contains its ID.
+                    if !stored.iter().any(|m| line.contains(&m.id)) {
+                        continue;
+                    }
+                    if resource_type == "Observation"
+                        && line_id(line).is_some_and(|id| replaced.contains(&id))
+                    {
+                        continue;
+                    }
+                    // Read as JSON, so spacing and escapes like `\/` cannot hide a reference.
+                    let Ok(value) = parse_json(line) else {
+                        return Err(PhvError::Conflict(vec![Issue::error(
+                            "PHV-LINE",
+                            format!("records/{resource_type}.ndjson:{}", position + 1),
+                            "this line is not valid JSON, so phv cannot tell whether it references a workout measure the import would remove: fix the line first",
+                        )]));
+                    };
+                    let refs = collect_refs(&value);
+                    for (member, users) in stored.iter().zip(users.iter_mut()) {
+                        if refs.contains(&format!("Observation/{}", member.id)) {
+                            users.push(format!("{resource_type}/{}", line_id(line).unwrap_or("?")));
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut removals = Vec::new();
+        let mut kept = Vec::new();
+        for (member, users) in stored.into_iter().zip(users) {
+            if users.is_empty() {
+                removals.push(member);
+            } else {
+                kept.push(KeptMember {
+                    workout: member.workout,
+                    member: format!("Observation/{}", member.id),
+                    measure: member.measure.to_string(),
+                    referenced_by: users,
+                });
+            }
+        }
+        removals.extend(absent);
+        let removals = removals
+            .into_iter()
+            .map(|member| Change::Remove {
+                resource_type: "Observation".into(),
+                id: member.id,
+            })
+            .collect();
+        Ok((removals, kept))
+    }
 }

@@ -9,6 +9,8 @@ pub const WORKOUT_SYSTEM: &str = "urn:phv:apple-health:workout";
 pub const WORKOUT_MEASURE_SYSTEM: &str = "urn:phv:apple-health:workout-measure";
 pub const ACTIVITY_TYPE_SYSTEM: &str = "urn:phv:apple-health:workout-activity-type";
 pub const SOURCE_ROW_SYSTEM: &str = "urn:phv:source-row";
+/// Tags a day or workout with the `through` date of the export it came from.
+pub const EXPORT_THROUGH_SYSTEM: &str = "urn:phv:export-through";
 pub const TZ_CODE: &str = "http://hl7.org/fhir/StructureDefinition/tz-code";
 
 const META_SOURCE: &str = "urn:phv:apple-health:activity-export";
@@ -63,8 +65,14 @@ fn base(profile_name: &str, system: &str, key: &str, code: Value, patient: &str)
     })
 }
 
-fn tag_with_row_hash(resource: &mut Value, row_hash: &str) {
-    resource["meta"]["tag"] = json!([{"system":SOURCE_ROW_SYSTEM,"code":row_hash}]);
+/// The row hash says whether the stored record still matches its row, and the export date
+/// says how new the file was. Records from before the date was tagged have only the hash.
+fn tag_with_source(resource: &mut Value, row_hash: &str, through: Option<&str>) {
+    let mut tags = vec![json!({"system":SOURCE_ROW_SYSTEM,"code":row_hash})];
+    if let Some(through) = through {
+        tags.push(json!({"system":EXPORT_THROUGH_SYSTEM,"code":through}));
+    }
+    resource["meta"]["tag"] = Value::Array(tags);
 }
 
 fn loinc(code: &str, display: &str) -> Value {
@@ -75,7 +83,7 @@ fn quantity(value: Number, unit: &str, code: &str) -> Value {
     json!({"value":value,"unit":unit,"system":UCUM,"code":code})
 }
 
-pub fn day(day: &DailySteps, patient: &str) -> Value {
+pub fn day(day: &DailySteps, patient: &str, through: Option<&str>) -> Value {
     let mut resource = base(
         "pa-observation-time-measure",
         DAILY_STEPS_SYSTEM,
@@ -83,7 +91,7 @@ pub fn day(day: &DailySteps, patient: &str) -> Value {
         loinc("41950-7", "Number of steps in 24 hour Measured"),
         patient,
     );
-    tag_with_row_hash(&mut resource, &day.row_hash);
+    tag_with_source(&mut resource, &day.row_hash, through);
     resource["effectiveDateTime"] = json!(day.date);
     resource["_effectiveDateTime"] = tz_extension(&day.time_zone);
     resource["valueQuantity"] = quantity(day.steps.clone(), "steps per day", "/d");
@@ -138,7 +146,7 @@ fn minutes(seconds: f64) -> Number {
 }
 
 /// The panel first, then one member per measure. `reference` values use the final IDs.
-pub fn workout(workout: &Workout, patient: &str) -> Vec<Value> {
+pub fn workout(workout: &Workout, patient: &str, through: Option<&str>) -> Vec<Value> {
     let measure = |code: &str, display: &str, value_key: &str, value: Value| {
         let mut member = base(
             "pa-observation-activity-measure",
@@ -195,7 +203,7 @@ pub fn workout(workout: &Workout, patient: &str) -> Vec<Value> {
         }]}),
         patient,
     );
-    tag_with_row_hash(&mut panel, &workout.row_hash);
+    tag_with_source(&mut panel, &workout.row_hash, through);
     panel["effectivePeriod"] = json!({"start":workout.start_text,"end":workout.end_text});
     if let Some(time_zone) = &workout.time_zone {
         panel["effectivePeriod"]["_start"] = tz_extension(time_zone);

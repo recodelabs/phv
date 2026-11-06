@@ -59,6 +59,10 @@ pub async fn run(
     })
 }
 
+fn held_keys<'a>(keys: impl Iterator<Item = &'a str>) -> String {
+    keys.collect::<Vec<_>>().join(", ")
+}
+
 fn print_report(report: &ImportReport) {
     let tally = |t: super::apple_activity::Tally| {
         format!(
@@ -94,6 +98,31 @@ fn print_report(report: &ImportReport) {
                 .stored_time_zone
                 .as_deref()
                 .unwrap_or("an unknown zone")
+        );
+    }
+    if let Some(first) = report.older_export.first() {
+        println!(
+            "Kept {} stored days and workouts that this export would change, because it ends {} and the vault already holds an export that ends {}: {}",
+            report.older_export.len(),
+            first.file_through,
+            first.vault_through,
+            held_keys(report.older_export.iter().map(|h| h.key.as_str()))
+        );
+    }
+    if !report.edited_since_import.is_empty() {
+        println!(
+            "Kept {} stored days and workouts that were edited after they were imported: {}",
+            report.edited_since_import.len(),
+            held_keys(report.edited_since_import.iter().map(|h| h.key.as_str()))
+        );
+    }
+    for kept in &report.kept_members {
+        println!(
+            "Kept {} ({} of workout {}), because {} references it",
+            kept.member,
+            kept.measure,
+            kept.workout,
+            kept.referenced_by.join(", ")
         );
     }
     if !report.export_failures.is_empty() {
