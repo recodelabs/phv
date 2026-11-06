@@ -1,0 +1,133 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:patient",
+      "resource": {
+        "resourceType": "Patient",
+        "name": [{ "family": "Example", "given": ["Test"] }],
+        "gender": "female",
+        "birthDate": "1980-01-01"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:asthma",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active" }] },
+        "code": { "coding": [{ "system": "http://snomed.info/sct", "code": "195967001", "display": "Asthma" }], "text": "Asthma" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "onsetDateTime": "2010-05-01"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:appendicitis",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "resolved" }] },
+        "code": { "text": "Appendicitis" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "onsetDateTime": "1995-03-01",
+        "abatementDateTime": "1995-03-10"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:penicillin",
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "clinicalStatus": { "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical", "code": "active" }] },
+        "code": { "text": "Penicillin" },
+        "criticality": "high",
+        "patient": { "reference": "urn:uuid:patient" }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:metformin",
+      "resource": {
+        "resourceType": "Medication",
+        "code": { "text": "Metformin 500 mg tablet" }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:metformin-use",
+      "resource": {
+        "resourceType": "MedicationStatement",
+        "status": "active",
+        "medicationReference": { "reference": "urn:uuid:metformin" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "effectiveDateTime": "2024-01-01",
+        "dosage": [{ "text": "500 mg twice daily" }]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:flu",
+      "resource": {
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": { "text": "Influenza" },
+        "patient": { "reference": "urn:uuid:patient" },
+        "occurrenceDateTime": "2025-10-01"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:creatinine",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "laboratory" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "2160-0" }], "text": "Creatinine" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "effectiveDateTime": "2026-03-14",
+        "valueQuantity": { "value": 1.50, "unit": "mg/dL", "system": "http://unitsofmeasure.org", "code": "mg/dL" }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:renal-panel",
+      "resource": {
+        "resourceType": "DiagnosticReport",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/v2-0074", "code": "LAB" }] }],
+        "code": { "text": "Renal panel" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "effectiveDateTime": "2026-03-14",
+        "performer": [{ "display": "Example Labs" }],
+        "result": [{ "reference": "urn:uuid:creatinine" }]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:weight",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "29463-7" }], "text": "Body weight" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "effectiveDateTime": "2026-06-01",
+        "valueQuantity": { "value": 70, "unit": "kg", "system": "http://unitsofmeasure.org", "code": "kg" }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:appendectomy",
+      "resource": {
+        "resourceType": "Procedure",
+        "status": "completed",
+        "code": { "text": "Appendectomy" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "performedDateTime": "1995-03-02"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:tobacco",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "social-history" }] }],
+        "code": { "coding": [{ "system": "http://loinc.org", "code": "72166-2" }], "text": "Tobacco smoking status" },
+        "subject": { "reference": "urn:uuid:patient" },
+        "effectiveDateTime": "2026-03-14",
+        "valueCodeableConcept": { "coding": [{ "system": "http://snomed.info/sct", "code": "8517006", "display": "Ex-smoker" }], "text": "Former smoker" }
+      }
+    }
+  ]
+}
