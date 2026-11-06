@@ -63,12 +63,74 @@ impl Period {
         }
     }
 
+    /// The next level down, which is what a period shows unless asked otherwise.
+    pub fn default_level(&self) -> Level {
+        match self {
+            Period::All => Level::Year,
+            Period::Year(_) => Level::Month,
+            Period::Month(..) => Level::Day,
+        }
+    }
+
+    /// Whether a level is finer than this period, so it can be shown inside it.
+    pub fn allows(&self, level: Level) -> bool {
+        match self {
+            Period::All => true,
+            Period::Year(_) => level != Level::Year,
+            Period::Month(..) => level == Level::Day,
+        }
+    }
+
     /// Whether a `YYYY-MM-DD` date, as stored, falls in this period.
     pub fn contains(&self, date: &str) -> bool {
         match self {
             Period::All => true,
             Period::Year(year) => date.starts_with(&format!("{year}-")),
             Period::Month(year, month) => date.starts_with(&format!("{year}-{month:02}-")),
+        }
+    }
+}
+
+/// What one bar stands for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Level {
+    Year,
+    Month,
+    Day,
+}
+
+impl Level {
+    pub fn parse(text: &str) -> Option<Level> {
+        match text {
+            "year" => Some(Level::Year),
+            "month" => Some(Level::Month),
+            "day" => Some(Level::Day),
+            _ => None,
+        }
+    }
+
+    pub fn code(self) -> &'static str {
+        match self {
+            Level::Year => "year",
+            Level::Month => "month",
+            Level::Day => "day",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Level::Year => "Year",
+            Level::Month => "Month",
+            Level::Day => "Day",
+        }
+    }
+
+    /// How much of a `YYYY-MM-DD` date identifies one bar.
+    fn key_width(self) -> usize {
+        match self {
+            Level::Year => 4,
+            Level::Month => 7,
+            Level::Day => 10,
         }
     }
 }
@@ -95,7 +157,7 @@ impl Unit {
         }
     }
 
-    fn from_meters(self, meters: f64) -> f64 {
+    fn of_meters(self, meters: f64) -> f64 {
         match self {
             Unit::Km => meters / 1000.0,
             Unit::Mi => meters / 1609.344,
@@ -150,14 +212,16 @@ fn is_panel(resource: &Value) -> bool {
             .is_some_and(|codings| codings.iter().any(|c| c["code"] == PANEL))
 }
 
-/// Whether the Activity page shows this record, directly or as part of a workout.
-pub fn is_shown(resource: &Value) -> bool {
-    is_step_record(resource)
-        || is_panel(resource)
-        || (is_activity(resource)
-            && [ACTIVITY_TYPE, DURATION, CALORIES, DISTANCE]
-                .iter()
-                .any(|code| has_code(&resource["code"], LOINC, code)))
+/// The path below the vault of the tab that shows this record, if one does.
+pub fn tab_of(resource: &Value) -> Option<&'static str> {
+    if is_step_record(resource) {
+        return Some("activity");
+    }
+    let is_member = is_activity(resource)
+        && [ACTIVITY_TYPE, DURATION, CALORIES, DISTANCE]
+            .iter()
+            .any(|code| has_code(&resource["code"], LOINC, code));
+    (is_panel(resource) || is_member).then_some("activity/workouts")
 }
 
 /// The `YYYY-MM-DD` start of a date as written, with no time zone conversion.
@@ -242,92 +306,148 @@ fn days_in_month(year: &str, month: u32) -> u32 {
     }
 }
 
-/// Sums `(date, amount)` points into buckets for a period, leaving gaps as gaps.
+/// One place on a chart's axis, before it knows its total.
+struct Slot {
+    key: String,
+    label: String,
+    title: String,
+    query: Option<String>,
+}
+
+fn month_slot(year: u32, month: u32, label_year: bool) -> Slot {
+    let name = MONTHS[month as usize - 1];
+    let title = format!("{name} {year}");
+    Slot {
+        key: format!("{year}-{month:02}"),
+        label: if label_year {
+            title.clone()
+        } else {
+            name.to_string()
+        },
+        title,
+        query: Some(format!("year={year}&month={month}")),
+    }
+}
+
+fn day_slot(year: u32, month: u32, day: u32, label_month: bool) -> Slot {
+    let title = format!("{day} {} {year}", MONTHS[month as usize - 1]);
+    Slot {
+        key: format!("{year}-{month:02}-{day:02}"),
+        label: if label_month {
+            title.clone()
+        } else {
+            day.to_string()
+        },
+        title,
+        query: None,
+    }
+}
+
+fn year_month(key: &str) -> Option<(u32, u32)> {
+    Some((key.get(..4)?.parse().ok()?, key.get(5..7)?.parse().ok()?))
+}
+
+/// Every place on the axis, so a gap in the records stays a gap on the chart.
+fn slots(first: &str, last: &str, period: &Period, level: Level) -> Vec<Slot> {
+    match (period, level) {
+        (Period::Month(year, month), _) => (1..=days_in_month(year, *month))
+            .map(|d| day_slot(year.parse().unwrap_or_default(), *month, d, false))
+            .collect(),
+        (Period::Year(year), Level::Day) => {
+            let y: u32 = year.parse().unwrap_or_default();
+            (1..=12)
+                .flat_map(|m| (1..=days_in_month(year, m)).map(move |d| day_slot(y, m, d, true)))
+                .collect()
+        }
+        (Period::Year(year), _) => {
+            let y: u32 = year.parse().unwrap_or_default();
+            (1..=12).map(|m| month_slot(y, m, false)).collect()
+        }
+        (Period::All, Level::Year) => {
+            let (Some((from, _)), Some((to, _))) = (year_month(first), year_month(last)) else {
+                return Vec::new();
+            };
+            (from..=to)
+                .map(|y| Slot {
+                    key: y.to_string(),
+                    label: y.to_string(),
+                    title: y.to_string(),
+                    query: Some(format!("year={y}")),
+                })
+                .collect()
+        }
+        (Period::All, level) => {
+            let (Some(from), Some(to)) = (year_month(first), year_month(last)) else {
+                return Vec::new();
+            };
+            let mut shown = Vec::new();
+            let mut at = from;
+            while at <= to {
+                let (y, m) = at;
+                if level == Level::Month {
+                    shown.push(month_slot(y, m, true));
+                } else {
+                    for d in 1..=days_in_month(&y.to_string(), m) {
+                        shown.push(day_slot(y, m, d, true));
+                    }
+                }
+                at = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+            }
+            shown.retain(|s| {
+                level == Level::Month
+                    || (first.get(..10).is_none_or(|f| s.key.as_str() >= f)
+                        && last.get(..10).is_none_or(|l| s.key.as_str() <= l))
+            });
+            shown
+        }
+    }
+}
+
+/// Sums `(date, amount)` points into a period's bars, leaving gaps as gaps.
 fn buckets(
     points: &[(String, f64)],
     period: &Period,
+    level: Level,
     show: impl Fn(f64) -> (String, String),
 ) -> Vec<Bucket> {
-    // label, title, date prefix, drill-down query
-    let slots: Vec<(String, String, String, Option<String>)> = match period {
-        Period::All => {
-            let years = || {
-                points
-                    .iter()
-                    .filter_map(|(date, _)| date.get(..4)?.parse::<u32>().ok())
-            };
-            match (years().min(), years().max()) {
-                (Some(first), Some(last)) => (first..=last)
-                    .map(|y| {
-                        let y = y.to_string();
-                        (
-                            y.clone(),
-                            y.clone(),
-                            format!("{y}-"),
-                            Some(format!("year={y}")),
-                        )
-                    })
-                    .collect(),
-                _ => Vec::new(),
-            }
+    let mut sums: HashMap<&str, f64> = HashMap::new();
+    for (date, amount) in points.iter().filter(|(date, _)| period.contains(date)) {
+        if let Some(key) = date.get(..level.key_width()) {
+            *sums.entry(key).or_default() += amount;
         }
-        Period::Year(year) => (1..=12)
-            .map(|m| {
-                let label = MONTHS[m as usize - 1];
-                (
-                    label.to_string(),
-                    format!("{label} {year}"),
-                    format!("{year}-{m:02}-"),
-                    Some(format!("year={year}&month={m}")),
-                )
-            })
-            .collect(),
-        Period::Month(year, month) => (1..=days_in_month(year, *month))
-            .map(|d| {
-                (
-                    d.to_string(),
-                    format!("{d} {} {year}", MONTHS[*month as usize - 1]),
-                    format!("{year}-{month:02}-{d:02}"),
-                    None,
-                )
-            })
-            .collect(),
-    };
-    slots
+    }
+    let first = points.iter().map(|(d, _)| d.as_str()).min().unwrap_or("");
+    let last = points.iter().map(|(d, _)| d.as_str()).max().unwrap_or("");
+    slots(first, last, period, level)
         .into_iter()
-        .map(|(label, title, prefix, query)| {
-            let matching: Vec<f64> = points
-                .iter()
-                .filter(|(date, _)| date.starts_with(&prefix))
-                .map(|(_, amount)| *amount)
-                .collect();
-            if matching.is_empty() {
-                return Bucket {
-                    label,
-                    title,
-                    query: None,
-                    value: None,
-                    text: NO_DATA.to_string(),
-                };
+        .map(|slot| match sums.get(slot.key.as_str()) {
+            Some(total) => {
+                let (value, text) = show(*total);
+                Bucket {
+                    label: slot.label,
+                    title: slot.title,
+                    query: slot.query,
+                    value: Some(value),
+                    text,
+                }
             }
-            let (value, text) = show(matching.iter().sum());
-            Bucket {
-                label,
-                title,
-                query,
-                value: Some(value),
-                text,
-            }
+            None => Bucket {
+                label: slot.label,
+                title: slot.title,
+                query: None,
+                value: None,
+                text: NO_DATA.to_string(),
+            },
         })
         .collect()
 }
 
-pub fn buckets_of_steps(days: &[StepDay], period: &Period) -> Vec<Bucket> {
+pub fn buckets_of_steps(days: &[StepDay], period: &Period, level: Level) -> Vec<Bucket> {
     let points: Vec<(String, f64)> = days
         .iter()
         .map(|d| (d.date.clone(), d.steps as f64))
         .collect();
-    buckets(&points, period, |total| {
+    buckets(&points, period, level, |total| {
         let total = total as u64;
         (total.to_string(), grouped(total))
     })
@@ -445,7 +565,7 @@ pub fn workouts(observations: &[Value], unit: Unit) -> Vec<Workout> {
                 kcal,
                 duration: minutes.map(friendly_duration).or(duration_text),
                 distance: meters
-                    .map(|m| format!("{:.2} {}", unit.from_meters(m), unit.code()))
+                    .map(|m| format!("{:.2} {}", unit.of_meters(m), unit.code()))
                     .or(distance_text),
                 calories: kcal
                     .map(|k| format!("{} kcal", grouped(k.round() as u64)))
@@ -470,7 +590,8 @@ pub fn in_period<'a>(all: &'a [Workout], period: &Period) -> Vec<&'a Workout> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeRow {
     pub name: String,
-    pub name_url: String,
+    /// The query string that focuses the tab on this activity in the same period.
+    pub query: String,
     pub count: usize,
     pub distance: Option<String>,
     /// The chart's number. `None` when no workout of this kind recorded a distance.
@@ -497,10 +618,10 @@ pub fn type_rows(all: &[Workout], period: &Period, unit: Unit) -> Vec<TypeRow> {
     sorted
         .into_iter()
         .map(|(name, (count, meters, minutes))| {
-            let distance = unit.from_meters(meters);
+            let distance = unit.of_meters(meters);
             TypeRow {
                 name: name.to_string(),
-                name_url: encode_segment(name),
+                query: query_of(period, Some(name), None),
                 count,
                 distance: (meters > 0.0)
                     .then(|| format!("{} {}", grouped_tenths(distance), unit.code())),
@@ -525,6 +646,18 @@ fn query_of(period: &Period, activity: Option<&str>, unit: Option<Unit>) -> Stri
     parts.join("&")
 }
 
+/// The natural level needs no parameter, so ordinary links stay short.
+fn steps_query(period: &Period, level: Level) -> String {
+    let mut parts = Vec::new();
+    if !matches!(period, Period::All) {
+        parts.push(period.query());
+    }
+    if level != period.default_level() {
+        parts.push(format!("by={}", level.code()));
+    }
+    parts.join("&")
+}
+
 /// Drilling into one activity's chart stays on that activity.
 fn keep_activity(mut buckets: Vec<Bucket>, activity: &str) -> Vec<Bucket> {
     for bucket in &mut buckets {
@@ -545,9 +678,9 @@ pub fn buckets_of_distance(
     let points: Vec<(String, f64)> = all
         .iter()
         .filter(|w| w.activity == activity)
-        .filter_map(|w| Some((w.day.clone()?, unit.from_meters(w.meters?))))
+        .filter_map(|w| Some((w.day.clone()?, unit.of_meters(w.meters?))))
         .collect();
-    let shown = buckets(&points, period, |distance| {
+    let shown = buckets(&points, period, period.default_level(), |distance| {
         (
             format!("{distance:.1}"),
             format!("{} {}", grouped_tenths(distance), unit.code()),
@@ -563,7 +696,7 @@ pub fn buckets_of_minutes(all: &[Workout], activity: &str, period: &Period) -> V
         .filter(|w| w.activity == activity)
         .filter_map(|w| Some((w.day.clone()?, w.minutes?)))
         .collect();
-    let shown = buckets(&points, period, |minutes| {
+    let shown = buckets(&points, period, period.default_level(), |minutes| {
         (format!("{minutes:.0}"), friendly_duration(minutes))
     });
     keep_activity(shown, activity)
@@ -583,13 +716,8 @@ pub fn totals(shown: &[&Workout], unit: Unit) -> ActivityTotals {
     let kcal: f64 = shown.iter().filter_map(|w| w.kcal).sum();
     ActivityTotals {
         workouts: grouped(shown.len() as u64),
-        distance: (meters > 0.0).then(|| {
-            format!(
-                "{} {}",
-                grouped_tenths(unit.from_meters(meters)),
-                unit.code()
-            )
-        }),
+        distance: (meters > 0.0)
+            .then(|| format!("{} {}", grouped_tenths(unit.of_meters(meters)), unit.code())),
         time: friendly_duration(minutes),
         calories: (kcal > 0.0).then(|| format!("{} kcal", grouped(kcal.round() as u64))),
     }
@@ -610,6 +738,31 @@ pub struct Step {
     pub query: String,
 }
 
+/// The Year and Month menus, and previous and next, which both tabs share.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeriodFilters {
+    pub years: Vec<FilterOption>,
+    pub months: Vec<FilterOption>,
+    pub month_enabled: bool,
+    pub previous: Option<Step>,
+    pub next: Option<Step>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LevelLink {
+    pub label: &'static str,
+    pub query: String,
+    pub on: bool,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StepsFilters {
+    pub period: PeriodFilters,
+    pub levels: Vec<LevelLink>,
+    pub any_filter: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnitLink {
     pub label: &'static str,
@@ -618,14 +771,10 @@ pub struct UnitLink {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FilterBar {
-    pub years: Vec<FilterOption>,
-    pub months: Vec<FilterOption>,
-    pub month_enabled: bool,
+pub struct WorkoutsFilters {
+    pub period: PeriodFilters,
     pub activities: Vec<FilterOption>,
     pub units: Vec<UnitLink>,
-    pub previous: Option<Step>,
-    pub next: Option<Step>,
     pub any_filter: bool,
 }
 
@@ -638,27 +787,15 @@ fn option(value: &str, label: String, selected: bool, enabled: bool) -> FilterOp
     }
 }
 
-/// Every filter's choices for the current page. Choices stay listed when they have no data, so
-/// the menus do not jump around, but they cannot be chosen.
-pub fn filter_bar(
-    days: &[StepDay],
-    all: &[Workout],
+/// Choices stay listed when they have no data, so the menus do not jump around, but they cannot
+/// be chosen. `every_date` fixes which years are listed, and `dates` which can be chosen.
+fn period_filters(
+    every_date: &[&str],
+    dates: &[&str],
     period: &Period,
-    selected: Option<&str>,
-    unit: Unit,
-) -> FilterBar {
-    let workouts_shown = || {
-        all.iter()
-            .filter(|w| selected.is_none_or(|s| w.activity == s))
-            .filter_map(|w| w.day.as_deref())
-    };
-    let mut dates: Vec<&str> = workouts_shown().collect();
-    if selected.is_none() {
-        dates.extend(days.iter().map(|d| d.date.as_str()));
-    }
-    dates.sort_unstable();
+    query_for: impl Fn(&Period) -> String,
+) -> PeriodFilters {
     let has = |prefix: &str| dates.iter().any(|d| d.starts_with(prefix));
-
     let current_year = match period {
         Period::All => None,
         Period::Year(year) | Period::Month(year, _) => Some(year.as_str()),
@@ -668,13 +805,7 @@ pub fn filter_bar(
         _ => None,
     };
 
-    // Years come from everything, so choosing an activity does not reshuffle the menu.
-    let mut every_year: Vec<&str> = all
-        .iter()
-        .filter_map(|w| w.day.as_deref())
-        .chain(days.iter().map(|d| d.date.as_str()))
-        .filter_map(|d| d.get(..4))
-        .collect();
+    let mut every_year: Vec<&str> = every_date.iter().filter_map(|d| d.get(..4)).collect();
     every_year.sort_unstable();
     every_year.dedup();
     let mut years = vec![option("", "All years".into(), current_year.is_none(), true)];
@@ -703,6 +834,87 @@ pub fn filter_bar(
         )
     }));
 
+    let (previous, next) = steps_around(period, dates, query_for);
+    PeriodFilters {
+        years,
+        months,
+        month_enabled: current_year.is_some(),
+        previous,
+        next,
+    }
+}
+
+/// The nearest periods at the same level that have data.
+fn steps_around(
+    period: &Period,
+    dates: &[&str],
+    query_for: impl Fn(&Period) -> String,
+) -> (Option<Step>, Option<Step>) {
+    let (width, current) = match period {
+        Period::All => return (None, None),
+        Period::Year(year) => (4, year.clone()),
+        Period::Month(year, month) => (7, format!("{year}-{month:02}")),
+    };
+    let mut keys: Vec<&str> = dates.iter().filter_map(|d| d.get(..width)).collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let step = |key: Option<&&str>| -> Option<Step> {
+        let key = *key?;
+        let target = match key.split_once('-') {
+            Some((year, month)) => Period::Month(year.to_string(), month.parse().ok()?),
+            None => Period::Year(key.to_string()),
+        };
+        Some(Step {
+            label: target.title(),
+            query: query_for(&target),
+        })
+    };
+    let before = keys.iter().rev().find(|key| **key < current.as_str());
+    let after = keys.iter().find(|key| **key > current.as_str());
+    (step(before), step(after))
+}
+
+pub fn steps_filters(days: &[StepDay], period: &Period, level: Level) -> StepsFilters {
+    let dates: Vec<&str> = days.iter().map(|d| d.date.as_str()).collect();
+    // Stepping keeps the chosen level when the next period allows it, and periods at one level do.
+    let chosen = level;
+    let chosen_default = period.default_level();
+    let query_for = |target: &Period| {
+        let level = if chosen == chosen_default {
+            target.default_level()
+        } else {
+            chosen
+        };
+        steps_query(target, level)
+    };
+    StepsFilters {
+        period: period_filters(&dates, &dates, period, query_for),
+        levels: [Level::Year, Level::Month, Level::Day]
+            .into_iter()
+            .map(|choice| LevelLink {
+                label: choice.label(),
+                query: steps_query(period, choice),
+                on: choice == level,
+                enabled: period.allows(choice),
+            })
+            .collect(),
+        any_filter: !matches!(period, Period::All) || level != period.default_level(),
+    }
+}
+
+pub fn workouts_filters(
+    all: &[Workout],
+    period: &Period,
+    selected: Option<&str>,
+    unit: Unit,
+) -> WorkoutsFilters {
+    let every_date: Vec<&str> = all.iter().filter_map(|w| w.day.as_deref()).collect();
+    let dates: Vec<&str> = all
+        .iter()
+        .filter(|w| selected.is_none_or(|s| w.activity == s))
+        .filter_map(|w| w.day.as_deref())
+        .collect();
+
     // Ordered by all-time count, so the order does not change with the period.
     let mut all_time: BTreeMap<&str, usize> = BTreeMap::new();
     for workout in all {
@@ -728,53 +940,19 @@ pub fn filter_bar(
         )
     }));
 
-    let (previous, next) = steps_around(period, &dates, selected);
-    let units = [("km", Unit::Km), ("mi", Unit::Mi)]
-        .into_iter()
-        .map(|(label, choice)| UnitLink {
-            label,
-            query: query_of(period, selected, Some(choice)),
-            on: choice == unit,
-        })
-        .collect();
-
-    FilterBar {
-        years,
-        months,
-        month_enabled: current_year.is_some(),
+    WorkoutsFilters {
+        period: period_filters(&every_date, &dates, period, |target| {
+            query_of(target, selected, None)
+        }),
         activities,
-        units,
-        previous,
-        next,
+        units: [("km", Unit::Km), ("mi", Unit::Mi)]
+            .into_iter()
+            .map(|(label, choice)| UnitLink {
+                label,
+                query: query_of(period, selected, Some(choice)),
+                on: choice == unit,
+            })
+            .collect(),
         any_filter: selected.is_some() || !matches!(period, Period::All),
     }
-}
-
-/// The nearest periods at the same level that have data.
-fn steps_around(
-    period: &Period,
-    dates: &[&str],
-    selected: Option<&str>,
-) -> (Option<Step>, Option<Step>) {
-    let (width, current) = match period {
-        Period::All => return (None, None),
-        Period::Year(year) => (4, year.clone()),
-        Period::Month(year, month) => (7, format!("{year}-{month:02}")),
-    };
-    let mut keys: Vec<&str> = dates.iter().filter_map(|d| d.get(..width)).collect();
-    keys.dedup();
-    let step = |key: Option<&&str>| -> Option<Step> {
-        let key = *key?;
-        let target = match key.split_once('-') {
-            Some((year, month)) => Period::Month(year.to_string(), month.parse().ok()?),
-            None => Period::Year(key.to_string()),
-        };
-        Some(Step {
-            label: target.title(),
-            query: query_of(&target, selected, None),
-        })
-    };
-    let before = keys.iter().rev().find(|key| **key < current.as_str());
-    let after = keys.iter().find(|key| **key > current.as_str());
-    (step(before), step(after))
 }

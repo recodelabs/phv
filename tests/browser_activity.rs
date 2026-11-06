@@ -3,8 +3,8 @@ mod browser_common;
 use axum::http::StatusCode;
 use browser_common::{app, copy_fixture, fixture, get};
 use phv::browser::model::activity::{
-    Period, Unit, buckets_of_distance, buckets_of_minutes, buckets_of_steps, filter_bar,
-    friendly_duration, step_days, summary, type_rows, workouts,
+    Level, Period, Unit, buckets_of_distance, buckets_of_minutes, buckets_of_steps,
+    friendly_duration, step_days, steps_filters, summary, type_rows, workouts, workouts_filters,
 };
 use phv::browser::{Vaults, router};
 use serde_json::json;
@@ -88,7 +88,7 @@ fn entered_in_error_steps_do_not_count() {
 #[test]
 fn all_years_are_continuous_and_a_gap_stays_a_gap() {
     let days = step_days(&fixture("Observation")).days;
-    let years = buckets_of_steps(&days, &Period::All);
+    let years = buckets_of_steps(&days, &Period::All, Level::Year);
     let shown: Vec<(&str, Option<&str>)> = years
         .iter()
         .map(|b| (b.label.as_str(), b.value.as_deref()))
@@ -100,14 +100,14 @@ fn all_years_are_continuous_and_a_gap_stays_a_gap() {
 #[test]
 fn a_year_shows_twelve_months_and_a_month_shows_every_day() {
     let days = step_days(&fixture("Observation")).days;
-    let months = buckets_of_steps(&days, &period(Some("2026"), None));
+    let months = buckets_of_steps(&days, &period(Some("2026"), None), Level::Month);
     assert_eq!(months.len(), 12);
     assert_eq!(months[0].label, "Jan");
     assert_eq!(months[0].text, "22,000");
     assert_eq!(months[2].value, None, "no records is not zero");
     assert_eq!(months[2].text, "No data");
 
-    let january = buckets_of_steps(&days, &period(Some("2026"), Some("1")));
+    let january = buckets_of_steps(&days, &period(Some("2026"), Some("1")), Level::Day);
     assert_eq!(january.len(), 31);
     assert_eq!(january[1].text, "6,000");
     assert_eq!(january[2].value, None, "the 3rd has no record");
@@ -118,11 +118,11 @@ fn a_year_shows_twelve_months_and_a_month_shows_every_day() {
 fn february_has_the_right_number_of_days() {
     let days = step_days(&fixture("Observation")).days;
     assert_eq!(
-        buckets_of_steps(&days, &period(Some("2026"), Some("2"))).len(),
+        buckets_of_steps(&days, &period(Some("2026"), Some("2")), Level::Day).len(),
         28
     );
     assert_eq!(
-        buckets_of_steps(&days, &period(Some("2024"), Some("2"))).len(),
+        buckets_of_steps(&days, &period(Some("2024"), Some("2")), Level::Day).len(),
         29
     );
 }
@@ -199,106 +199,40 @@ fn one_activitys_distance_is_bucketed_over_time() {
     assert_eq!(shown, [("2025", "10.0 km"), ("2026", "24.6 km")]);
 }
 
-#[tokio::test]
-async fn the_page_works_as_tables_and_only_it_loads_the_charts() {
-    let app = app();
-    let html = get(&app, "/v/vault/activity").await.text();
-    assert!(html.contains(r#"data-chart="steps""#));
-    assert!(html.contains(r#"data-x="2026" data-y="29777""#), "{html}");
-    assert!(html.contains("47,277"), "{html}");
-    assert!(html.contains("/assets/plot.min.js"));
-    assert!(html.contains("Distance by activity"));
-    assert!(html.contains("recorded workouts"), "{html}");
-    let other = get(&app, "/v/vault/vitals").await.text();
-    assert!(!other.contains("plot.min.js"));
+#[test]
+fn every_period_can_be_shown_at_any_finer_level() {
+    assert_eq!(Period::All.default_level(), Level::Year);
+    assert_eq!(period(Some("2026"), None).default_level(), Level::Month);
+    assert_eq!(period(Some("2026"), Some("1")).default_level(), Level::Day);
+    assert!(Period::All.allows(Level::Day));
+    assert!(period(Some("2026"), None).allows(Level::Day));
+    assert!(!period(Some("2026"), None).allows(Level::Year));
+    assert!(!period(Some("2026"), Some("1")).allows(Level::Month));
 }
 
-#[tokio::test]
-async fn drilling_down_follows_the_period() {
-    let app = app();
-    let year = get(&app, "/v/vault/activity?year=2026").await.text();
-    assert!(
-        year.contains(r#"href="/v/vault/activity?year=2026&amp;month=1""#)
-            || year.contains("year=2026&#38;month=1"),
-        "{year}"
-    );
-    let month = get(&app, "/v/vault/activity?year=2026&month=1")
-        .await
-        .text();
-    assert!(month.contains("Jan 2026"));
-    assert!(month.contains("24.60 km"));
-    assert!(
-        !month.contains("3.92 km"),
-        "February's walk is outside January"
-    );
+#[test]
+fn all_years_can_show_every_month_or_every_day_between_first_and_last() {
+    let days = step_days(&fixture("Observation")).days;
+    let months = buckets_of_steps(&days, &Period::All, Level::Month);
+    let labels: Vec<&str> = months.iter().map(|b| b.label.as_str()).collect();
+    assert_eq!(labels, ["Dec 2025", "Jan 2026", "Feb 2026"]);
+    assert_eq!(months[0].query.as_deref(), Some("year=2025&month=12"));
+
+    let every_day = buckets_of_steps(&days, &Period::All, Level::Day);
+    assert_eq!(every_day.len(), 47, "30 Dec 2025 through 14 Feb 2026");
+    assert_eq!(every_day[0].label, "30 Dec 2025");
+    assert_eq!(every_day[0].text, "8,000");
+    assert_eq!(every_day[4].value, None, "3 Jan has no record");
+    assert_eq!(every_day[46].text, "7,777");
 }
 
-#[tokio::test]
-async fn an_activity_filter_narrows_the_list_and_shows_its_distance_over_time() {
-    let html = get(&app(), "/v/vault/activity?type=Cycling").await.text();
-    assert!(html.contains(r#"data-chart="distance-time""#));
-    assert!(html.contains("24.60 km"));
-    assert!(!html.contains("5.20 km"));
-}
-
-#[tokio::test]
-async fn a_bad_period_is_404() {
-    let app = app();
-    for uri in [
-        "/v/vault/activity?year=abc",
-        "/v/vault/activity?year=2026&month=13",
-        "/v/vault/activity?month=1",
-    ] {
-        assert_eq!(get(&app, uri).await.status, StatusCode::NOT_FOUND, "{uri}");
-    }
-}
-
-#[tokio::test]
-async fn an_empty_vault_says_so() {
-    let dir = tempfile::tempdir().unwrap();
-    let vault = phv::store::Vault::init(&dir.path().join("v")).unwrap();
-    let app = router(Vaults::single(vault.root().to_path_buf()));
-    let html = get(&app, "/v/vault/activity").await.text();
-    assert!(html.contains("No activity yet."), "{html}");
-}
-
-#[tokio::test]
-async fn a_notice_explains_records_it_could_not_count() {
-    let dir = tempfile::tempdir().unwrap();
-    copy_fixture(dir.path());
-    let path = dir.path().join("records/Observation.ndjson");
-    let mut text = std::fs::read_to_string(&path).unwrap();
-    text.push_str(r#"{"resourceType":"Observation","id":"zz","status":"final","category":[{"coding":[{"code":"activity","system":"http://terminology.hl7.org/CodeSystem/observation-category"}]}],"code":{"coding":[{"code":"41950-7","system":"http://loinc.org"}]}}
-"#);
-    std::fs::write(&path, text).unwrap();
-    let app = router(Vaults::single(dir.path().to_path_buf()));
-    let html = get(&app, "/v/vault/activity").await.text();
-    assert!(
-        html.contains("1 step records have no usable date or count"),
-        "{html}"
-    );
-}
-
-#[tokio::test]
-async fn the_overview_shows_the_latest_days_steps() {
-    let html = get(&app(), "/v/vault/overview").await.text();
-    assert!(html.contains("7,777"), "{html}");
-    assert!(html.contains("Steps · 14 Feb 2026"), "{html}");
-}
-
-#[tokio::test]
-async fn activity_records_name_their_topic() {
-    let observations = fixture("Observation");
-    let panel = observations
-        .iter()
-        .find(|o| o.to_string().contains("PAPanel"))
-        .unwrap();
-    let path = format!(
-        "/v/vault/fhir/Observation/{}",
-        panel["id"].as_str().unwrap()
-    );
-    let html = get(&app(), &path).await.text();
-    assert!(html.contains(r#"href="/v/vault/activity""#), "{html}");
+#[test]
+fn a_year_can_show_every_day() {
+    let days = step_days(&fixture("Observation")).days;
+    let shown = buckets_of_steps(&days, &period(Some("2026"), None), Level::Day);
+    assert_eq!(shown.len(), 365);
+    assert_eq!(shown[0].label, "1 Jan 2026");
+    assert_eq!(shown[0].text, "4,000");
 }
 
 #[test]
@@ -322,29 +256,24 @@ fn units_only_accept_km_and_mi() {
 
 #[test]
 fn an_activitys_filters_offer_only_periods_it_happened_in() {
-    let observations = fixture("Observation");
-    let days = step_days(&observations).days;
-    let all = workouts(&observations, Unit::Km);
-    let bar = filter_bar(&days, &all, &Period::All, Some("Walking"), Unit::Km);
-    let year = |value: &str| bar.years.iter().find(|o| o.value == value).unwrap();
+    let all = workouts(&fixture("Observation"), Unit::Km);
+    let bar = workouts_filters(&all, &Period::All, Some("Walking"), Unit::Km);
+    let year = |value: &str| bar.period.years.iter().find(|o| o.value == value).unwrap();
     assert!(year("2026").enabled, "the walk was in 2026");
     assert!(!year("2025").enabled, "no walks in 2025");
-    assert_eq!(bar.years[1].value, "2026", "newest first");
-    assert!(!bar.month_enabled, "pick a year first");
+    assert_eq!(bar.period.years[1].value, "2026", "newest first");
+    assert!(!bar.period.month_enabled, "pick a year first");
 }
 
 #[test]
-fn months_show_which_have_data_and_activities_show_their_count() {
-    let observations = fixture("Observation");
-    let days = step_days(&observations).days;
-    let all = workouts(&observations, Unit::Km);
-    let period = period(Some("2026"), Some("1"));
-    let bar = filter_bar(&days, &all, &period, None, Unit::Km);
-    assert!(bar.month_enabled);
-    let month = |value: &str| bar.months.iter().find(|o| o.value == value).unwrap();
+fn workout_months_show_which_have_data_and_activities_show_their_count() {
+    let all = workouts(&fixture("Observation"), Unit::Km);
+    let bar = workouts_filters(&all, &period(Some("2026"), Some("1")), None, Unit::Km);
+    assert!(bar.period.month_enabled);
+    let month = |value: &str| bar.period.months.iter().find(|o| o.value == value).unwrap();
     assert!(month("1").enabled && month("1").selected);
     assert!(month("2").enabled);
-    assert!(!month("3").enabled, "no records in March");
+    assert!(!month("3").enabled, "no workouts in March");
     let labels: Vec<&str> = bar
         .activities
         .iter()
@@ -372,38 +301,50 @@ fn months_show_which_have_data_and_activities_show_their_count() {
 }
 
 #[test]
-fn previous_and_next_step_between_periods_that_have_data() {
-    let observations = fixture("Observation");
-    let days = step_days(&observations).days;
-    let all = workouts(&observations, Unit::Km);
-    let january = filter_bar(
-        &days,
-        &all,
-        &period(Some("2026"), Some("1")),
-        None,
-        Unit::Km,
-    );
-    let previous = january.previous.unwrap();
+fn workouts_step_between_periods_that_have_workouts() {
+    let all = workouts(&fixture("Observation"), Unit::Km);
+    let january = workouts_filters(&all, &period(Some("2026"), Some("1")), None, Unit::Km);
+    let previous = january.period.previous.unwrap();
     assert_eq!(previous.label, "Dec 2025");
     assert_eq!(previous.query, "year=2025&month=12");
-    let next = january.next.unwrap();
+    assert_eq!(january.period.next.unwrap().label, "Feb 2026");
+    let year = workouts_filters(&all, &period(Some("2026"), None), Some("Cycling"), Unit::Km);
     assert_eq!(
-        next.label, "Feb 2026",
-        "skips nothing, since February has data"
+        year.period.previous.unwrap().query,
+        "year=2025&type=Cycling"
     );
-    let year = filter_bar(
-        &days,
-        &all,
-        &period(Some("2026"), None),
-        Some("Cycling"),
-        Unit::Km,
-    );
-    assert_eq!(year.previous.unwrap().query, "year=2025&type=Cycling");
-    assert_eq!(year.next, None);
+    assert_eq!(year.period.next, None);
+    let everything = workouts_filters(&all, &Period::All, None, Unit::Km);
+    assert_eq!(everything.period.previous, None);
+}
+
+#[test]
+fn steps_filters_use_step_days_and_keep_the_chosen_level() {
+    let days = step_days(&fixture("Observation")).days;
+    let bar = steps_filters(&days, &period(Some("2026"), None), Level::Day);
+    let previous = bar.period.previous.unwrap();
+    assert_eq!(previous.label, "2025");
+    assert_eq!(previous.query, "year=2025&by=day");
+    let levels: Vec<(&str, bool, bool)> = bar
+        .levels
+        .iter()
+        .map(|l| (l.label, l.enabled, l.on))
+        .collect();
     assert_eq!(
-        filter_bar(&days, &all, &Period::All, None, Unit::Km).previous,
-        None
+        levels,
+        [
+            ("Year", false, false),
+            ("Month", true, false),
+            ("Day", true, true)
+        ]
     );
+    assert_eq!(
+        bar.levels[1].query, "year=2026",
+        "the natural level needs no parameter"
+    );
+    assert_eq!(bar.levels[2].query, "year=2026&by=day");
+    let natural = steps_filters(&days, &period(Some("2026"), None), Level::Month);
+    assert_eq!(natural.period.previous.unwrap().query, "year=2025");
 }
 
 #[test]
@@ -424,18 +365,242 @@ fn drilling_into_an_activitys_chart_keeps_the_activity() {
     assert_eq!(years[1].query.as_deref(), Some("year=2026&type=Cycling"));
 }
 
+const STEPS: &str = "/v/vault/activity";
+const WORKOUTS: &str = "/v/vault/activity/workouts";
+
 #[tokio::test]
-async fn one_form_holds_every_filter_and_works_without_javascript() {
-    let html = get(&app(), "/v/vault/activity?year=2026&type=Cycling")
+async fn steps_and_workouts_are_separate_tabs() {
+    let app = app();
+    let steps = get(&app, STEPS).await.text();
+    assert!(steps.contains(r#"data-chart="steps""#));
+    assert!(steps.contains(r#"data-x="2026" data-y="29777""#), "{steps}");
+    assert!(steps.contains("47,277"));
+    assert!(!steps.contains("Distance by activity"));
+    assert!(!steps.contains("Distance units"), "steps have no distance");
+    assert!(!steps.contains(r#"name="type""#));
+
+    let workouts = get(&app, WORKOUTS).await.text();
+    assert!(workouts.contains("Distance by activity"));
+    assert!(workouts.contains("recorded workouts"));
+    assert!(!workouts.contains(r#"data-chart="steps""#));
+    assert!(!workouts.contains("47,277"));
+    assert!(workouts.contains("Distance units"));
+}
+
+#[tokio::test]
+async fn the_active_tab_is_marked_and_switching_keeps_the_period() {
+    let app = app();
+    let steps = get(&app, "/v/vault/activity?year=2026&month=1")
         .await
         .text();
     assert!(
-        html.contains(r#"<form class="filters" method="get""#),
+        steps.contains(
+            r#"<a href="/v/vault/activity?year=2026&#38;month=1" aria-current="page">Steps</a>"#
+        ),
+        "{steps}"
+    );
+    assert!(
+        steps
+            .contains(r#"<a href="/v/vault/activity/workouts?year=2026&#38;month=1">Workouts</a>"#),
+        "{steps}"
+    );
+    let workouts = get(&app, "/v/vault/activity/workouts?year=2026&type=Cycling")
+        .await
+        .text();
+    assert!(
+        workouts.contains(r#"<a href="/v/vault/activity?year=2026">Steps</a>"#),
+        "{workouts}"
+    );
+    assert!(
+        workouts.contains(r#"aria-current="page">Workouts</a>"#),
+        "{workouts}"
+    );
+}
+
+#[tokio::test]
+async fn only_activity_pages_load_the_charts() {
+    let app = app();
+    assert!(
+        get(&app, STEPS)
+            .await
+            .text()
+            .contains("/assets/plot.min.js")
+    );
+    assert!(
+        get(&app, WORKOUTS)
+            .await
+            .text()
+            .contains("/assets/plot.min.js")
+    );
+    assert!(
+        !get(&app, "/v/vault/vitals")
+            .await
+            .text()
+            .contains("plot.min.js")
+    );
+}
+
+#[tokio::test]
+async fn steps_can_be_shown_by_year_month_or_day() {
+    let app = app();
+    let by_month = get(&app, "/v/vault/activity?by=month").await.text();
+    assert!(
+        by_month.contains(r#"data-x="Jan 2026" data-y="22000""#),
+        "{by_month}"
+    );
+    assert!(
+        by_month.contains(r#"href="/v/vault/activity?by=day""#),
+        "{by_month}"
+    );
+    let by_day = get(&app, "/v/vault/activity?year=2026&by=day").await.text();
+    assert!(
+        by_day.contains(r#"data-x="14 Feb 2026" data-y="7777""#),
+        "{by_day}"
+    );
+    assert!(
+        by_day.contains(r#"aria-current="true">Day</a>"#),
+        "{by_day}"
+    );
+}
+
+#[tokio::test]
+async fn a_level_that_does_not_fit_the_period_falls_back_to_its_natural_one() {
+    let app = app();
+    for uri in [
+        "/v/vault/activity?year=2026&by=year",
+        "/v/vault/activity?year=2026&by=nonsense",
+    ] {
+        let reply = get(&app, uri).await;
+        assert_eq!(reply.status, StatusCode::OK, "{uri}");
+        assert!(
+            reply.text().contains(r#"data-x="Jan" data-y="22000""#),
+            "{uri}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn drilling_into_a_year_follows_the_period() {
+    let app = app();
+    let year = get(&app, "/v/vault/activity?year=2026").await.text();
+    assert!(year.contains("year=2026&#38;month=1"), "{year}");
+    let month = get(&app, "/v/vault/activity/workouts?year=2026&month=1")
+        .await
+        .text();
+    assert!(month.contains("Jan 2026"));
+    assert!(month.contains("24.60 km"));
+    assert!(
+        !month.contains("3.92 km"),
+        "February's walk is outside January"
+    );
+}
+
+#[tokio::test]
+async fn an_activity_filter_narrows_the_list_and_shows_its_distance_over_time() {
+    let html = get(&app(), "/v/vault/activity/workouts?type=Cycling")
+        .await
+        .text();
+    assert!(html.contains(r#"data-chart="distance-time""#));
+    assert!(html.contains("24.60 km"));
+    assert!(!html.contains("5.20 km"));
+}
+
+#[tokio::test]
+async fn a_bad_period_is_404_on_both_tabs() {
+    let app = app();
+    for path in [STEPS, WORKOUTS] {
+        for query in ["?year=abc", "?year=2026&month=13", "?month=1"] {
+            let uri = format!("{path}{query}");
+            assert_eq!(get(&app, &uri).await.status, StatusCode::NOT_FOUND, "{uri}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_empty_vault_says_so_on_both_tabs() {
+    let dir = tempfile::tempdir().unwrap();
+    let vault = phv::store::Vault::init(&dir.path().join("v")).unwrap();
+    let app = router(Vaults::single(vault.root().to_path_buf()));
+    assert!(get(&app, STEPS).await.text().contains("No steps yet."));
+    assert!(
+        get(&app, WORKOUTS)
+            .await
+            .text()
+            .contains("No workouts yet.")
+    );
+}
+
+#[tokio::test]
+async fn a_notice_explains_records_it_could_not_count() {
+    let dir = tempfile::tempdir().unwrap();
+    copy_fixture(dir.path());
+    let path = dir.path().join("records/Observation.ndjson");
+    let mut text = std::fs::read_to_string(&path).unwrap();
+    text.push_str(r#"{"resourceType":"Observation","id":"zz","status":"final","category":[{"coding":[{"code":"activity","system":"http://terminology.hl7.org/CodeSystem/observation-category"}]}],"code":{"coding":[{"code":"41950-7","system":"http://loinc.org"}]}}
+"#);
+    std::fs::write(&path, text).unwrap();
+    let app = router(Vaults::single(dir.path().to_path_buf()));
+    let html = get(&app, STEPS).await.text();
+    assert!(
+        html.contains("1 step records have no usable date or count"),
         "{html}"
     );
-    assert!(html.contains(r#"name="year""#));
-    assert!(html.contains(r#"name="month""#));
-    assert!(html.contains(r#"name="type""#));
+}
+
+#[tokio::test]
+async fn the_overview_shows_the_latest_days_steps() {
+    let html = get(&app(), "/v/vault/overview").await.text();
+    assert!(html.contains("7,777"), "{html}");
+    assert!(html.contains("Steps · 14 Feb 2026"), "{html}");
+}
+
+#[tokio::test]
+async fn activity_records_name_the_right_tab() {
+    let observations = fixture("Observation");
+    let id_of = |needle: &str| {
+        observations
+            .iter()
+            .find(|o| o.to_string().contains(needle))
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let app = app();
+    let panel = get(
+        &app,
+        &format!("/v/vault/fhir/Observation/{}", id_of("PAPanel")),
+    )
+    .await
+    .text();
+    assert!(
+        panel.contains(r#"href="/v/vault/activity/workouts""#),
+        "{panel}"
+    );
+    let steps = get(
+        &app,
+        &format!("/v/vault/fhir/Observation/{}", id_of("41950-7")),
+    )
+    .await
+    .text();
+    assert!(steps.contains(r#"href="/v/vault/activity""#), "{steps}");
+}
+
+#[tokio::test]
+async fn each_tab_has_its_own_filter_form_that_works_without_javascript() {
+    let app = app();
+    let html = get(&app, "/v/vault/activity/workouts?year=2026&type=Cycling")
+        .await
+        .text();
+    assert!(
+        html.contains(r#"<form class="filters" method="get" action="/v/vault/activity/workouts""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"name="year""#)
+            && html.contains(r#"name="month""#)
+            && html.contains(r#"name="type""#)
+    );
     assert!(html.contains(r#"<option value="2026" selected>"#), "{html}");
     assert!(
         html.contains(r#"<option value="Cycling" selected>"#),
@@ -445,23 +610,32 @@ async fn one_form_holds_every_filter_and_works_without_javascript() {
         html.contains(">Apply</button>"),
         "needed with JavaScript off"
     );
-    assert!(html.contains(">Clear</a>"));
+    assert!(
+        html.contains(r#"<a class="clear" href="/v/vault/activity/workouts">Clear</a>"#),
+        "{html}"
+    );
+    let steps = get(&app, "/v/vault/activity?year=2026").await.text();
+    assert!(
+        steps.contains(r#"<form class="filters" method="get" action="/v/vault/activity""#),
+        "{steps}"
+    );
 }
 
 #[tokio::test]
 async fn the_month_filter_waits_for_a_year() {
-    let html = get(&app(), "/v/vault/activity").await.text();
-    assert!(html.contains(r#"<select name="month" disabled>"#), "{html}");
-    assert!(!html.contains(">Clear</a>"), "nothing to clear");
+    let app = app();
+    for path in [STEPS, WORKOUTS] {
+        let html = get(&app, path).await.text();
+        assert!(html.contains(r#"<select name="month" disabled>"#), "{html}");
+        assert!(!html.contains(">Clear</a>"), "nothing to clear");
+    }
 }
 
 #[tokio::test]
-async fn an_activity_filter_scopes_the_whole_page() {
-    let html = get(&app(), "/v/vault/activity?type=Cycling").await.text();
-    assert!(
-        !html.contains(r#"data-chart="steps""#),
-        "steps are not about cycling"
-    );
+async fn choosing_an_activity_focuses_the_workouts_tab() {
+    let html = get(&app(), "/v/vault/activity/workouts?type=Cycling")
+        .await
+        .text();
     assert!(!html.contains(r#"data-chart="distance-type""#));
     assert!(html.contains("34.6 km"), "{html}");
     assert!(html.contains("1 h 42 min"), "{html}");
@@ -470,16 +644,21 @@ async fn an_activity_filter_scopes_the_whole_page() {
 
 #[tokio::test]
 async fn an_activity_with_no_distance_charts_time_instead() {
-    let html = get(&app(), "/v/vault/activity?type=Yoga").await.text();
+    let html = get(&app(), "/v/vault/activity/workouts?type=Yoga")
+        .await
+        .text();
     assert!(html.contains(r#"data-chart="activity-time""#), "{html}");
     assert!(!html.contains(r#"data-chart="distance-time""#));
 }
 
 #[tokio::test]
 async fn a_month_can_chart_one_activity_by_day() {
-    let html = get(&app(), "/v/vault/activity?year=2026&month=1&type=Cycling")
-        .await
-        .text();
+    let html = get(
+        &app(),
+        "/v/vault/activity/workouts?year=2026&month=1&type=Cycling",
+    )
+    .await
+    .text();
     assert!(html.contains(r#"data-chart="distance-time""#), "{html}");
 }
 
@@ -496,7 +675,7 @@ async fn a_period_with_no_data_says_so_instead_of_listing_gaps() {
 #[tokio::test]
 async fn choosing_miles_is_remembered() {
     let app = app();
-    let chosen = get(&app, "/v/vault/activity?unit=mi").await;
+    let chosen = get(&app, "/v/vault/activity/workouts?unit=mi").await;
     assert!(chosen.text().contains("15.29 mi"), "{}", chosen.text());
     assert!(chosen.text().contains(r#"data-axis="Distance (mi)""#));
     let cookie = chosen.header("set-cookie").to_string();
@@ -504,13 +683,8 @@ async fn choosing_miles_is_remembered() {
     assert!(cookie.contains("SameSite=Strict"), "{cookie}");
     assert!(cookie.contains("HttpOnly"), "{cookie}");
 
-    let remembered = browser_common::send(
-        &app,
-        "GET",
-        "/v/vault/activity",
-        &[("cookie", "phv_unit=mi")],
-    )
-    .await;
+    let remembered =
+        browser_common::send(&app, "GET", WORKOUTS, &[("cookie", "phv_unit=mi")]).await;
     assert!(remembered.text().contains("15.29 mi"));
     assert_eq!(
         remembered.header("set-cookie"),
@@ -521,7 +695,7 @@ async fn choosing_miles_is_remembered() {
     let back = browser_common::send(
         &app,
         "GET",
-        "/v/vault/activity?unit=km",
+        "/v/vault/activity/workouts?unit=km",
         &[("cookie", "phv_unit=mi")],
     )
     .await;
@@ -532,33 +706,37 @@ async fn choosing_miles_is_remembered() {
 #[tokio::test]
 async fn kilometers_are_the_default_and_a_bad_unit_is_ignored() {
     let app = app();
-    assert!(
-        get(&app, "/v/vault/activity")
-            .await
-            .text()
-            .contains("24.60 km")
-    );
-    let bad = get(&app, "/v/vault/activity?unit=furlong").await;
+    assert!(get(&app, WORKOUTS).await.text().contains("24.60 km"));
+    let bad = get(&app, "/v/vault/activity/workouts?unit=furlong").await;
     assert_eq!(bad.status, StatusCode::OK);
     assert!(bad.text().contains("24.60 km"));
     assert_eq!(bad.header("set-cookie"), "");
-    let cookie = browser_common::send(
-        &app,
-        "GET",
-        "/v/vault/activity",
-        &[("cookie", "phv_unit=furlong")],
-    )
-    .await;
+    let cookie =
+        browser_common::send(&app, "GET", WORKOUTS, &[("cookie", "phv_unit=furlong")]).await;
     assert!(cookie.text().contains("24.60 km"));
 }
 
 #[tokio::test]
 async fn unit_links_keep_the_other_filters() {
-    let html = get(&app(), "/v/vault/activity?year=2026&type=Cycling")
+    let html = get(&app(), "/v/vault/activity/workouts?year=2026&type=Cycling")
         .await
         .text();
     assert!(
         html.contains("year=2026&#38;type=Cycling&#38;unit=mi"),
         "{html}"
     );
+}
+
+#[tokio::test]
+async fn distance_by_activity_links_to_each_activity_and_keeps_the_period() {
+    let html = get(&app(), "/v/vault/activity/workouts?year=2026")
+        .await
+        .text();
+    assert!(
+        html.contains(
+            r#"<a href="/v/vault/activity/workouts?year=2026&#38;type=Cycling">Cycling</a>"#
+        ),
+        "{html}"
+    );
+    assert!(html.contains("Click a bar to see that activity."), "{html}");
 }

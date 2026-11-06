@@ -1,0 +1,5 @@
+<p class="period">
+  {% if let Some(step) = &filters.period.previous %}<a href="{{ path }}?{{ step.query }}">‹ {{ step.label }}</a>{% endif %}
+  <b>{{ heading }}</b>
+  {% if let Some(step) = &filters.period.next %}<a href="{{ path }}?{{ step.query }}">{{ step.label }} ›</a>{% endif %}
+</p>

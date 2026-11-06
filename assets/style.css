@@ -60,6 +60,10 @@ td.history:empty { display: none; }
 .chip { border: 1px solid var(--line); border-radius: 1rem; padding: 0 .7rem; color: var(--text); text-decoration: none; font-size: .85rem; }
 .chip[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .75rem; overflow: auto; font: 13px/1.5 ui-monospace, Menlo, monospace; }
+.tabs { display: flex; gap: .25rem; margin: .5rem 0 0; border-bottom: 1px solid var(--line); }
+.tabs a { padding: .4rem .9rem; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs a:hover { color: var(--text); }
+.tabs a[aria-current] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
 .filter-bar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .5rem 1rem; padding: .6rem 0; background: var(--bg); border-bottom: 1px solid var(--line); margin-bottom: .75rem; }
 .filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .75rem; }
 .filters label { display: flex; flex-direction: column; gap: .15rem; color: var(--muted); font-size: .8rem; }
@@ -70,6 +74,8 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 6p
 .units { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .units a { padding: .3rem .7rem; font-size: .9rem; color: var(--text); background: var(--panel); text-decoration: none; }
 .units a[aria-current] { background: var(--accent); color: var(--accent-text); }
+.units .off { padding: .3rem .7rem; font-size: .9rem; color: var(--muted); background: var(--panel); opacity: .55; }
+.units .units-label { padding: .3rem .7rem; font-size: .8rem; color: var(--muted); align-self: center; border-right: 1px solid var(--line); }
 .period { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1rem; margin: 0 0 .75rem; }
 .period b { font-size: 1.05rem; }
 @media (min-width: 40rem) { .filter-bar { position: sticky; top: 0; z-index: 2; } }

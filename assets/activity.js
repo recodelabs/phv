@@ -2,18 +2,41 @@
 // Plot adds its own style element, which the page's policy forbids, so style.css has those rules.
 const number = (n) => n.toLocaleString();
 
+// Past this many bars, each is too thin to see or click, so the chart draws a line.
+const MOST_BARS = 150;
+
 function columnChart(table, all, rows, width) {
   const unit = table.dataset.unit;
   const domain = all.map((r) => r.label);
+  const everyNth = Math.ceil(domain.length / Math.max(1, Math.floor((width - 80) / 72)));
+  const tickFormat = (d, i) => (i % everyNth ? "" : d);
+  const y = { grid: true, label: table.dataset.axis, tickFormat: "s" };
+  const tip = Plot.tip(
+    rows,
+    Plot.pointerX({ x: "label", y: "value", title: (r) => `${r.title}\n${number(r.value)} ${unit}` }),
+  );
+  if (domain.length > MOST_BARS) {
+    return {
+      height: 260,
+      marginLeft: 56,
+      x: { label: null, type: "point", domain, tickFormat, tickSize: 0 },
+      y,
+      marks: [
+        Plot.ruleY([0]),
+        Plot.lineY(
+          all.map((r) => ({ ...r, value: r.value ?? NaN })),
+          { x: "label", y: "value", stroke: "var(--chart)", strokeWidth: 1.5 },
+        ),
+        tip,
+      ],
+    };
+  }
+  const thin = domain.length > 40;
   return {
     height: 260,
     marginLeft: 56,
-    x: {
-      label: null,
-      domain,
-      tickFormat: (d, i) => (domain.length > 16 && i % 5 ? "" : d),
-    },
-    y: { grid: true, label: table.dataset.axis, tickFormat: "s" },
+    x: { label: null, domain, tickFormat, tickSize: thin ? 0 : 6 },
+    y,
     marks: [
       Plot.barY(rows, {
         x: "label",
@@ -21,15 +44,12 @@ function columnChart(table, all, rows, width) {
         href: "href",
         target: "_self",
         fill: "var(--chart)",
-        inset: 1,
-        rx1y2: 3,
-        rx2y2: 3,
+        inset: thin ? 0.5 : 1,
+        rx1y2: thin ? 0 : 3,
+        rx2y2: thin ? 0 : 3,
       }),
       Plot.ruleY([0]),
-      Plot.tip(
-        rows,
-        Plot.pointerX({ x: "label", y: "value", title: (r) => `${r.title}\n${number(r.value)} ${unit}` }),
-      ),
+      tip,
     ],
   };
 }

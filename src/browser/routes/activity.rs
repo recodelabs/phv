@@ -1,10 +1,10 @@
-//! The Activity page. One form scopes everything on it.
+//! The Activity tabs: Steps and Workouts. Each has one form that scopes everything below it.
 
-use super::{App, Chrome, not_found, render, run};
+use super::{App, Chrome, Ctx, PageError, not_found, render, run};
 use crate::browser::model::activity::{
-    ActivityTotals, Bucket, FilterBar, Period, StepSummary, TypeRow, Unit, Workout,
-    buckets_of_distance, buckets_of_minutes, buckets_of_steps, filter_bar, in_period, step_days,
-    summary, totals, type_rows, workouts,
+    ActivityTotals, Bucket, Level, Period, StepSummary, StepsFilters, TypeRow, Unit, Workout,
+    WorkoutsFilters, buckets_of_distance, buckets_of_minutes, buckets_of_steps, in_period,
+    step_days, steps_filters, summary, totals, type_rows, workouts, workouts_filters,
 };
 use askama::Template;
 use axum::{
@@ -18,25 +18,44 @@ use serde::Deserialize;
 
 /// Older workouts stay reachable by picking a year or month.
 const WORKOUTS_SHOWN: usize = 100;
+/// Past this many bars, a chart draws a line, so a bar is no longer something to click.
+const MOST_BARS: usize = 150;
 const UNIT_COOKIE: &str = "phv_unit";
 
 #[derive(Template)]
-#[template(path = "activity.html")]
-struct ActivityPage {
+#[template(path = "activity_steps.html")]
+struct StepsPage {
     chrome: Chrome,
-    empty: bool,
+    path: String,
+    heading: String,
+    any_steps: bool,
     title: String,
-    filters: FilterBar,
+    /// The period only, so switching tabs keeps it.
+    tab_query: String,
+    filters: StepsFilters,
     unusable: usize,
     duplicate_days: usize,
-    /// "Year", "Month" or "Day": the level the charts are showing.
     level: &'static str,
-    has_next_level: bool,
-    unit: &'static str,
-    selected: Option<String>,
+    can_zoom: bool,
     summary: StepSummary,
     steps: Vec<Bucket>,
     has_steps: bool,
+}
+
+#[derive(Template)]
+#[template(path = "activity_workouts.html")]
+struct WorkoutsPage {
+    chrome: Chrome,
+    path: String,
+    heading: String,
+    any_workouts: bool,
+    title: String,
+    tab_query: String,
+    filters: WorkoutsFilters,
+    level: &'static str,
+    can_zoom: bool,
+    unit: &'static str,
+    selected: Option<String>,
     types: Vec<TypeRow>,
     any_distance: bool,
     totals: ActivityTotals,
@@ -47,12 +66,66 @@ struct ActivityPage {
 }
 
 #[derive(Deserialize)]
-struct ActivityQuery {
+struct StepsQuery {
+    year: Option<String>,
+    month: Option<String>,
+    by: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct WorkoutsQuery {
     year: Option<String>,
     month: Option<String>,
     #[serde(rename = "type")]
     activity: Option<String>,
     unit: Option<String>,
+}
+
+fn filled(value: &Option<String>) -> Option<String> {
+    value.clone().filter(|v| !v.is_empty())
+}
+
+fn period_of(year: &Option<String>, month: &Option<String>) -> Result<Period, PageError> {
+    let (year, month) = (filled(year), filled(month));
+    Period::parse(year.as_deref(), month.as_deref()).ok_or_else(|| not_found("No such period."))
+}
+
+fn observations(cx: &mut Ctx) -> Result<Vec<serde_json::Value>, PageError> {
+    Ok(cx.records.of_type("Observation")?)
+}
+
+async fn steps_page(
+    State(app): State<App>,
+    Path(vault): Path<String>,
+    Query(query): Query<StepsQuery>,
+) -> Response {
+    run(app, vault, "activity", move |cx| {
+        let period = period_of(&query.year, &query.month)?;
+        let level = filled(&query.by)
+            .as_deref()
+            .and_then(Level::parse)
+            .filter(|level| period.allows(*level))
+            .unwrap_or(period.default_level());
+        let data = step_days(&observations(cx)?);
+        let steps = buckets_of_steps(&data.days, &period, level);
+        render(StepsPage {
+            chrome: cx.chrome()?,
+            path: format!("/v/{}/activity", cx.vault_name),
+            heading: period.title(),
+            any_steps: !data.days.is_empty(),
+            title: period.title(),
+            tab_query: period.query(),
+            filters: steps_filters(&data.days, &period, level),
+            unusable: data.unusable,
+            duplicate_days: data.duplicate_days,
+            level: level.label(),
+            can_zoom: level != Level::Day && steps.len() <= MOST_BARS,
+            summary: summary(&data.days, &period),
+            has_steps: steps.iter().any(|b| b.value.is_some()),
+            steps,
+        })
+    })
+    .await
 }
 
 fn unit_from_cookie(headers: &HeaderMap) -> Option<Unit> {
@@ -66,24 +139,18 @@ fn unit_from_cookie(headers: &HeaderMap) -> Option<Unit> {
         .and_then(|(_, value)| Unit::parse(value))
 }
 
-async fn page(
+async fn workouts_page(
     State(app): State<App>,
     Path(vault): Path<String>,
-    Query(query): Query<ActivityQuery>,
+    Query(query): Query<WorkoutsQuery>,
     headers: HeaderMap,
 ) -> Response {
     let chosen = query.unit.as_deref().and_then(Unit::parse);
     let unit = chosen.or(unit_from_cookie(&headers)).unwrap_or(Unit::Km);
     let mut response = run(app, vault, "activity", move |cx| {
-        let filled = |value: &Option<String>| value.clone().filter(|v| !v.is_empty());
-        let (year, month) = (filled(&query.year), filled(&query.month));
-        let period = Period::parse(year.as_deref(), month.as_deref())
-            .ok_or_else(|| not_found("No such period."))?;
+        let period = period_of(&query.year, &query.month)?;
         let selected = filled(&query.activity);
-
-        let observations = cx.records.of_type("Observation")?;
-        let steps = step_days(&observations);
-        let all = workouts(&observations, unit);
+        let all = workouts(&observations(cx)?, unit);
         let types = type_rows(&all, &period, unit);
 
         let shown: Vec<&Workout> = in_period(&all, &period)
@@ -115,25 +182,21 @@ async fn page(
             Vec::new()
         };
 
-        let step_buckets = buckets_of_steps(&steps.days, &period);
-        render(ActivityPage {
+        render(WorkoutsPage {
             chrome: cx.chrome()?,
-            empty: steps.days.is_empty() && all.is_empty(),
-            title: period.title(),
-            filters: filter_bar(&steps.days, &all, &period, selected.as_deref(), unit),
-            unusable: steps.unusable,
-            duplicate_days: steps.duplicate_days,
-            level: match period {
-                Period::All => "Year",
-                Period::Year(_) => "Month",
-                Period::Month(..) => "Day",
+            path: format!("/v/{}/activity/workouts", cx.vault_name),
+            heading: match &selected {
+                Some(activity) => format!("{} · {activity}", period.title()),
+                None => period.title(),
             },
-            has_next_level: !matches!(period, Period::Month(..)),
+            any_workouts: !all.is_empty(),
+            title: period.title(),
+            tab_query: period.query(),
+            filters: workouts_filters(&all, &period, selected.as_deref(), unit),
+            level: period.default_level().label(),
+            can_zoom: period.default_level() != Level::Day,
             unit: unit.code(),
             selected,
-            summary: summary(&steps.days, &period),
-            has_steps: step_buckets.iter().any(|b| b.value.is_some()),
-            steps: step_buckets,
             any_distance: types.iter().any(|t| t.chart_distance.is_some()),
             types,
             totals: chosen_totals,
@@ -157,5 +220,7 @@ async fn page(
 }
 
 pub fn routes() -> Router<App> {
-    Router::new().route("/v/{vault}/activity", get(page))
+    Router::new()
+        .route("/v/{vault}/activity", get(steps_page))
+        .route("/v/{vault}/activity/workouts", get(workouts_page))
 }

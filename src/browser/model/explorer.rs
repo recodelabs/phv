@@ -118,7 +118,9 @@ pub fn topic_of(resource: &Value, observations: &[Value]) -> Option<(&'static st
     match resource["resourceType"].as_str()? {
         "Observation" if is_vital(resource) => simple("Vitals", "vitals"),
         "Observation" if is_lab_observation(resource) => simple("Labs", "labs"),
-        "Observation" if activity::is_shown(resource) => simple("Activity", "activity"),
+        "Observation" if activity::tab_of(resource).is_some() => {
+            activity::tab_of(resource).and_then(|path| simple("Activity", path))
+        }
         "DiagnosticReport" if is_lab_report(resource, observations) => Some((
             "Labs",
             format!("labs/reports/{}", encode_segment(&id_of(resource))),

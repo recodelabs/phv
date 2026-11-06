@@ -78,7 +78,8 @@ All routes are GET.
 | `/v/{vault}/labs/reports/{id}` | One report with its results |
 | `/v/{vault}/labs/tests/{test}` | History of one test |
 | `/v/{vault}/conditions`, `medicines`, `allergies`, `vaccines` | One list each |
-| `/v/{vault}/activity?year=&month=&type=&unit=` | Steps and workouts |
+| `/v/{vault}/activity?year=&month=&by=` | Steps |
+| `/v/{vault}/activity/workouts?year=&month=&type=&unit=` | Workouts |
 | `/v/{vault}/documents?category=` | Catalog of original files |
 | `/v/{vault}/sources/{sha256}` | The original file |
 | `/v/{vault}/fhir` | Resource types with counts |
@@ -108,7 +109,7 @@ A record's topic comes only from what the record states, never from guessing at 
 | Medicines | `MedicationStatement`, `MedicationRequest` |
 | Allergies | `AllergyIntolerance` |
 | Vaccines | `Immunization` |
-| Activity | Daily steps and workouts. See [Activity](#activity) |
+| Activity | Daily steps and workouts, on two tabs. See [Activity](#activity) |
 | Documents | `DocumentReference` |
 | All FHIR only | Everything else, including an `Observation` with no category and a `DiagnosticReport` that is not a lab report |
 
@@ -153,18 +154,24 @@ The Activity page shows steps and workouts imported by `phv import apple-activit
 
 **Records:** Observations with category `activity`. Steps have LOINC `41950-7`. A workout is a panel with code `PAPanel`, whose `hasMember` records hold its type, duration, calories and distance.
 
-**Filters:** one row at the top of the page scopes everything below it, and stays visible while scrolling on wider screens. It is a plain GET form with Year, Month and Activity menus, plus km and mi links.
+**Tabs:** Steps at `/v/{vault}/activity` and Workouts at `/v/{vault}/activity/workouts`. Each has only the filters that apply to it, and switching tabs keeps the year and month.
+
+**Filters:** one row at the top of each tab scopes everything below it, and stays visible while scrolling on wider screens. It is a plain GET form.
 
 - With JavaScript, a change applies straight away. Without it, an Apply button does the same.
-- Query parameters are `year`, `month`, `type` and `unit`. A year or month that is not real is a 404, and an unknown unit is ignored.
-- Choices with no data stay listed but cannot be chosen, so menus do not jump around. The activity menu shows each one's count for the period. Month waits until a year is chosen.
+- Year and Month are on both tabs. A year or month that is not real is a 404.
+- Choices with no data stay listed but cannot be chosen, so menus do not jump around. Month waits until a year is chosen.
 - Previous and next links step to the nearest period at the same level that has data.
-- Every link keeps the other filters: clicking a bar zooms in, and stepping to another period keeps the activity.
+- Every link keeps the other filters, and clicking a bar zooms in.
 - Clear removes every filter.
 
-**With no activity chosen:** steps for the period (total, average per recorded day, days recorded, a chart and a table), distance by activity with workout count and time, and the workout list. Activities with no distance stay in the table. A period with no steps says so rather than listing gaps.
+**Steps tab:** total, average per recorded day and days recorded, then a chart and a table. "Show by" chooses what one bar stands for, through the `by` parameter: Year, Month or Day, finer than the period. It defaults to the next level down, and a value that does not fit the period falls back to that default. Past 150 bars, such as every day across all years, the chart draws a line, with gaps kept. A period with no steps says so rather than listing gaps.
 
-**With an activity chosen:** the page is about that activity, so steps leave. It shows workouts, distance, time and calories, then a chart of distance over the period, or of time for an activity with no distance, then the workout list. The list shows the newest 100, and a note says to pick a period for the rest.
+**Workouts tab:** an Activity menu (`type`) with each activity's count for the period, and km and mi links (`unit`). It shows workouts, distance, time and calories for the selection.
+
+- **With no activity chosen:** distance by activity, largest first, with workout count and time. Clicking a bar or name chooses that activity. Activities with no distance stay in the table.
+- **With an activity chosen:** a chart of its distance over the period, or of time for an activity with no distance.
+- **Workout list:** the newest 100, with a note to pick a period for the rest.
 
 **Units:** distances show in kilometers or miles (1 mi = 1,609.344 m). Kilometers are the default. A `phv_unit` cookie remembers the choice, with `SameSite=Strict` and `HttpOnly`. This is the only thing the browser remembers, and it is about display, so nothing is written to the vault.
 
