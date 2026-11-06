@@ -4,7 +4,8 @@ use axum::http::StatusCode;
 use browser_common::{app, copy_fixture, fixture, get};
 use phv::browser::model::activity::{
     Level, Period, Unit, buckets_of_distance, buckets_of_minutes, buckets_of_steps,
-    friendly_duration, step_days, steps_filters, summary, type_rows, workouts, workouts_filters,
+    friendly_duration, step_calendar, step_days, steps_filters, summary, type_rows,
+    workout_calendar, workouts, workouts_filters,
 };
 use phv::browser::{Vaults, router};
 use serde_json::json;
@@ -739,4 +740,103 @@ async fn distance_by_activity_links_to_each_activity_and_keeps_the_period() {
         "{html}"
     );
     assert!(html.contains("Click a bar to see that activity."), "{html}");
+}
+
+#[test]
+fn the_steps_calendar_has_one_entry_per_recorded_day_in_the_period() {
+    let days = step_days(&fixture("Observation")).days;
+    let year = step_calendar(&days, &period(Some("2026"), None));
+    assert_eq!(year.len(), 4);
+    assert_eq!(year[3].date, "2026-02-14");
+    assert_eq!(year[3].value, "7777");
+    assert_eq!(year[3].title, "14 Feb 2026 · 7,777 steps");
+    assert_eq!(year[3].query, "year=2026&month=2");
+    assert_eq!(step_calendar(&days, &Period::All).len(), 6);
+}
+
+#[test]
+fn the_workout_calendar_adds_up_each_day_and_follows_the_activity() {
+    let all = workouts(&fixture("Observation"), Unit::Km);
+    let everything = workout_calendar(&all, &Period::All, None);
+    assert_eq!(everything.len(), 5);
+    let ride = everything.iter().find(|d| d.date == "2026-01-04").unwrap();
+    assert_eq!(ride.value, "72");
+    assert_eq!(ride.title, "4 Jan 2026 · Cycling · 1 h 12 min");
+    assert_eq!(ride.query, "year=2026&month=1");
+
+    let cycling = workout_calendar(&all, &Period::All, Some("Cycling"));
+    assert_eq!(cycling.len(), 2);
+    assert_eq!(cycling[0].query, "year=2025&month=12&type=Cycling");
+}
+
+#[test]
+fn two_workouts_on_one_day_share_a_square() {
+    let mut all = workouts(&fixture("Observation"), Unit::Km);
+    let ride = all.iter().find(|w| w.date == "4 Jan 2026").unwrap().clone();
+    all.push(ride);
+    let shown = workout_calendar(&all, &period(Some("2026"), Some("1")), None);
+    let day = shown.iter().find(|d| d.date == "2026-01-04").unwrap();
+    assert_eq!(day.value, "144");
+    assert_eq!(day.title, "4 Jan 2026 · 2 workouts: Cycling · 2 h 24 min");
+}
+
+#[test]
+fn a_workout_with_no_duration_still_counts_as_a_day() {
+    let panel = json!({
+        "id": "p", "status": "final",
+        "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "activity"}]}],
+        "code": {"coding": [{"code": "PAPanel"}]},
+        "effectivePeriod": {"start": "2026-01-01T08:00:00Z"}
+    });
+    let all = workouts(&[panel], Unit::Km);
+    let shown = workout_calendar(&all, &Period::All, None);
+    assert_eq!(shown[0].value, "1");
+    assert_eq!(shown[0].title, "1 Jan 2026 · Workout");
+}
+
+#[tokio::test]
+async fn both_tabs_show_a_calendar_for_a_year_or_all_years_but_not_a_month() {
+    let app = app();
+    for path in [STEPS, WORKOUTS] {
+        for query in ["", "?year=2026"] {
+            let html = get(&app, &format!("{path}{query}")).await.text();
+            assert!(html.contains(r#"data-chart="calendar""#), "{path}{query}");
+            assert!(html.contains("<h2>Calendar</h2>"), "{path}{query}");
+            assert!(
+                html.contains(r#"class="heat-legend" hidden"#),
+                "{path}{query}"
+            );
+        }
+        let month = get(&app, &format!("{path}?year=2026&month=1")).await.text();
+        assert!(
+            !month.contains(r#"data-chart="calendar""#),
+            "the day chart covers a month"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_calendar_table_stays_closed_without_javascript_and_links_to_each_month() {
+    let html = get(&app(), "/v/vault/activity?year=2026").await.text();
+    assert!(html.contains(r#"<details class="table-view">"#), "{html}");
+    assert!(
+        html.contains(r#"data-x="2026-02-14" data-y="7777""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"href="/v/vault/activity?year=2026&#38;month=2""#),
+        "{html}"
+    );
+}
+
+#[tokio::test]
+async fn a_workout_calendar_follows_the_chosen_activity() {
+    let html = get(&app(), "/v/vault/activity/workouts?type=Yoga")
+        .await
+        .text();
+    assert!(
+        html.contains(r#"data-x="2026-01-01" data-y="40""#),
+        "{html}"
+    );
+    assert!(!html.contains(r#"data-x="2026-01-04""#), "{html}");
 }

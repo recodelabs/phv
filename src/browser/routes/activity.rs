@@ -2,9 +2,10 @@
 
 use super::{App, Chrome, Ctx, PageError, not_found, render, run};
 use crate::browser::model::activity::{
-    ActivityTotals, Bucket, Level, Period, StepSummary, StepsFilters, TypeRow, Unit, Workout,
-    WorkoutsFilters, buckets_of_distance, buckets_of_minutes, buckets_of_steps, in_period,
-    step_days, steps_filters, summary, totals, type_rows, workouts, workouts_filters,
+    ActivityTotals, Bucket, CalendarDay, Level, Period, StepSummary, StepsFilters, TypeRow, Unit,
+    Workout, WorkoutsFilters, buckets_of_distance, buckets_of_minutes, buckets_of_steps, in_period,
+    step_calendar, step_days, steps_filters, summary, totals, type_rows, workout_calendar,
+    workouts, workouts_filters,
 };
 use askama::Template;
 use axum::{
@@ -40,6 +41,7 @@ struct StepsPage {
     summary: StepSummary,
     steps: Vec<Bucket>,
     has_steps: bool,
+    calendar: Vec<CalendarDay>,
 }
 
 #[derive(Template)]
@@ -61,6 +63,7 @@ struct WorkoutsPage {
     totals: ActivityTotals,
     over_time: Vec<Bucket>,
     over_time_is_distance: bool,
+    calendar: Vec<CalendarDay>,
     workouts: Vec<Workout>,
     workout_total: usize,
 }
@@ -123,6 +126,11 @@ async fn steps_page(
             summary: summary(&data.days, &period),
             has_steps: steps.iter().any(|b| b.value.is_some()),
             steps,
+            calendar: if matches!(period, Period::Month(..)) {
+                Vec::new()
+            } else {
+                step_calendar(&data.days, &period)
+            },
         })
     })
     .await
@@ -150,6 +158,7 @@ async fn workouts_page(
     let mut response = run(app, vault, "activity", move |cx| {
         let period = period_of(&query.year, &query.month)?;
         let selected = filled(&query.activity);
+        let chosen_activity = selected.clone();
         let all = workouts(&observations(cx)?, unit);
         let types = type_rows(&all, &period, unit);
 
@@ -202,6 +211,11 @@ async fn workouts_page(
             totals: chosen_totals,
             over_time,
             over_time_is_distance,
+            calendar: if matches!(period, Period::Month(..)) {
+                Vec::new()
+            } else {
+                workout_calendar(&all, &period, chosen_activity.as_deref())
+            },
             workouts: listed,
             workout_total,
         })

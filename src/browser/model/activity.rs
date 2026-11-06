@@ -956,3 +956,78 @@ pub fn workouts_filters(
         any_filter: selected.is_some() || !matches!(period, Period::All),
     }
 }
+
+/// One square on a calendar. A day with no entry has no records, which is not a low value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalendarDay {
+    /// `YYYY-MM-DD`, as stored.
+    pub date: String,
+    pub value: String,
+    pub title: String,
+    /// The query string that opens this day's month.
+    pub query: String,
+}
+
+fn month_period(date: &str) -> Option<Period> {
+    let (year, month) = year_month(date)?;
+    Some(Period::Month(year.to_string(), month))
+}
+
+pub fn step_calendar(days: &[StepDay], period: &Period) -> Vec<CalendarDay> {
+    days.iter()
+        .filter(|day| period.contains(&day.date))
+        .filter_map(|day| {
+            Some(CalendarDay {
+                date: day.date.clone(),
+                value: day.steps.to_string(),
+                title: format!(
+                    "{} · {} steps",
+                    friendly_date(&day.date),
+                    grouped(day.steps)
+                ),
+                query: month_period(&day.date)?.query(),
+            })
+        })
+        .collect()
+}
+
+/// Each day's workouts, shaded by their minutes. A workout with no duration still counts.
+pub fn workout_calendar(
+    all: &[Workout],
+    period: &Period,
+    selected: Option<&str>,
+) -> Vec<CalendarDay> {
+    let mut by_day: BTreeMap<&str, Vec<&Workout>> = BTreeMap::new();
+    for workout in in_period(all, period) {
+        if selected.is_some_and(|s| workout.activity != s) {
+            continue;
+        }
+        if let Some(day) = &workout.day {
+            by_day.entry(day).or_default().push(workout);
+        }
+    }
+    by_day
+        .into_iter()
+        .filter_map(|(date, day)| {
+            let minutes: f64 = day.iter().filter_map(|w| w.minutes).sum();
+            let mut names: Vec<&str> = day.iter().map(|w| w.activity.as_str()).collect();
+            names.sort_unstable();
+            names.dedup();
+            let what = if day.len() == 1 {
+                names.join(", ")
+            } else {
+                format!("{} workouts: {}", day.len(), names.join(", "))
+            };
+            let mut title = format!("{} · {what}", friendly_date(date));
+            if minutes > 0.0 {
+                title.push_str(&format!(" · {}", friendly_duration(minutes)));
+            }
+            Some(CalendarDay {
+                date: date.to_string(),
+                value: format!("{:.0}", minutes.max(1.0)),
+                title,
+                query: query_of(&month_period(date)?, selected, None),
+            })
+        })
+        .collect()
+}

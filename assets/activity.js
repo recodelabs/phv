@@ -90,7 +90,91 @@ function barChart(table, all, rows) {
   };
 }
 
+// A GitHub-style calendar: one row of weeks per year, with an empty square for a day with no record.
+function calendarChart(table, all, rows, width) {
+  const utc = (text) => new Date(`${text}T00:00:00Z`);
+  const place = (date) => ({
+    date,
+    year: String(date.getUTCFullYear()),
+    week: d3.utcSunday.count(d3.utcYear(date), date),
+    day: date.getUTCDay(),
+  });
+  const sorted = rows.map((r) => r.value).sort((a, b) => a - b);
+  const cuts = [0.25, 0.5, 0.75].map((q) => d3.quantileSorted(sorted, q));
+  const level = (value) => 1 + cuts.filter((cut) => value > cut).length;
+  const records = rows.map((r) => ({
+    ...place(utc(r.label)),
+    title: r.title,
+    href: r.href,
+    fill: `var(--heat-${level(r.value)})`,
+  }));
+  const years = d3.range(
+    d3.min(records, (r) => r.date.getUTCFullYear()),
+    d3.max(records, (r) => r.date.getUTCFullYear()) + 1,
+  );
+  const everyDay = years.flatMap((year) =>
+    d3.utcDays(new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year + 1, 0, 1))).map(place),
+  );
+  const firstOfMonth = years.flatMap((year) =>
+    d3.utcMonths(new Date(Date.UTC(year, 0, 1)), new Date(Date.UTC(year + 1, 0, 1))).map(place),
+  );
+  const marginLeft = 24;
+  const marginRight = 44;
+  // Squares stay readable on a phone, where the calendar scrolls sideways instead.
+  const chartWidth = Math.max(width, 620);
+  const square = (chartWidth - marginLeft - marginRight) / 54;
+  const weekdays = ["", "M", "", "W", "", "F", ""];
+  return {
+    width: chartWidth,
+    height: years.length * (square * 8 + 10) + 14,
+    marginLeft,
+    marginRight,
+    marginTop: 6,
+    marginBottom: 6,
+    padding: 0,
+    color: { type: "identity" },
+    x: { axis: null, domain: d3.range(54) },
+    y: {
+      label: null,
+      domain: [-1, 0, 1, 2, 3, 4, 5, 6],
+      tickSize: 0,
+      tickFormat: (d) => weekdays[d] ?? "",
+    },
+    fy: { label: null, domain: years.map(String).reverse(), tickSize: 0 },
+    marks: [
+      Plot.cell(everyDay, {
+        x: "week",
+        y: "day",
+        fy: "year",
+        fill: "var(--heat-0)",
+        inset: 1,
+        rx: 2,
+      }),
+      Plot.cell(records, {
+        x: "week",
+        y: "day",
+        fy: "year",
+        fill: "fill",
+        href: "href",
+        target: "_self",
+        inset: 1,
+        rx: 2,
+      }),
+      Plot.text(firstOfMonth, {
+        x: "week",
+        fy: "year",
+        y: () => -1,
+        text: (d) => d3.utcFormat("%b")(d.date),
+        textAnchor: "start",
+        fontSize: 9,
+      }),
+      Plot.tip(records, Plot.pointer({ x: "week", y: "day", fy: "year", title: "title" })),
+    ],
+  };
+}
+
 const charts = {
+  calendar: calendarChart,
   steps: columnChart,
   "distance-time": columnChart,
   "activity-time": columnChart,
@@ -133,6 +217,16 @@ for (const table of document.querySelectorAll("table[data-chart]")) {
     ...charts[table.dataset.chart](table, all, rows, width),
   });
   svg.querySelector("style")?.remove();
-  details.before(svg);
+  if (table.dataset.chart === "calendar") {
+    const scroller = document.createElement("div");
+    scroller.className = "calendar-scroll";
+    scroller.append(svg);
+    details.before(scroller);
+    scroller.scrollLeft = scroller.scrollWidth;
+  } else {
+    details.before(svg);
+  }
   details.open = false;
+  const legend = details.previousElementSibling.previousElementSibling;
+  if (legend?.classList.contains("heat-legend")) legend.hidden = false;
 }
