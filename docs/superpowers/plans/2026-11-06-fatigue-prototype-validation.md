@@ -79,3 +79,10 @@ Scope: this is a read-only integration with generated synthetic vault data. Clin
 ## PR verification after updating the base
 
 Rebased onto upstream main `1516558` on 2026-11-06. Fresh local results with Rust 1.99.1: **337 Rust tests passed**, zero failed or ignored; **26 Node tests passed**, zero failed or skipped, including validated synthetic import through the rebuilt CLI. Formatting, Clippy with warnings denied, and `git diff --check` passed. The interface files are unchanged from the built-in-browser verification above.
+
+
+## CI compatibility fixes
+
+Updated the PR branch with upstream IPS support from main `84dd95c`. The independent Java validator initially could not start because its shell script was not executable. After correcting that mode, terminology-disabled validation ambiguously matched laboratory and vital-sign observations to pregnancy slices. The CI script now uses the official HL7 R4 terminology service for its generated synthetic fixture. Four IPS section display names were corrected to the accepted LOINC labels and the golden document was regenerated through the real generator; clinical record values did not change.
+
+Fresh local verification: **368 Rust tests passed**, **26 Node tests passed**, zero failed or skipped; formatting and Clippy passed. The exact repaired `check-ips-java.sh` completed successfully with Java 21 and validator 7.0.2: zero errors. A separate negative control with a required vital-sign UCUM code removed failed with the expected minimum-cardinality error. No validator error suppression or profile relaxation was added. The independent check requires the terminology service; its input remains the generated synthetic IPS only.

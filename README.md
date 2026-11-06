@@ -165,7 +165,7 @@ Use `-` as `FILE` for stdin with `validate`, `add` and `replace`, and `--json` f
 - Date filters need `.toDate()`: `effectiveDateTime.toDate() >= @2026-01-01`. Without it, `>=` and `<=` on a date give no answer because of an upstream octofhir issue. phv warns when records give no answer, so an empty result with a warning does not mean there are no records.
 - Some FHIR rules on data types are not enforced upstream, such as a `Period` that ends before it starts, or a `Range` whose low is above its high. Check dates and ranges against the original document.
 - An IPS needs the person's name and birth date on the `Patient`. Lab results need the lab that ran them: phv takes it from the result's report when the result has none.
-- phv checks IPS records against their profiles with octofhir, which misses some rules, such as a vital sign's UCUM unit code. CI also checks a sample IPS with the HL7 Java validator.
+- phv checks IPS records against their profiles with octofhir, which misses some rules, such as a vital sign's UCUM unit code. CI also checks a synthetic sample IPS with the HL7 Java validator and the HL7 terminology service; terminology is needed to distinguish the IPS Observation slices.
 
 ## Design
 
