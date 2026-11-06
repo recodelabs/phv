@@ -8,6 +8,7 @@ phv (personal health vault) keeps one person's health records as FHIR R4 files o
 - Let AI map documents and photos to FHIR, while only deterministic code validates and writes the vault.
 - Ship as a single Rust binary that runs on a laptop with no external services.
 - Keep Git diffs small: a change to one resource shows up as a change to one line.
+- Let someone set up a vault for each family member through an interactive `phv setup`, with Git and GitHub as options they choose.
 
 ## Non-goals for the vault core
 
@@ -27,13 +28,38 @@ phv (personal health vault) keeps one person's health records as FHIR R4 files o
 | Repository | Contents | Visibility |
 |---|---|---|
 | `recodelabs/phv` | Code only | Public |
-| Personal data repo, one per person | Records and source files | Private, owned by the person |
+| Personal vault, one per person | Records and source files | Private. A plain folder, a local Git repo or a private GitHub repo |
 
-phv finds the data repo in this order: `--vault PATH`, the `PHV_VAULT` environment variable, then `vault` in `~/.config/phv/config.toml`.
+phv finds the vault in this order: `--vault`, the `PHV_VAULT` environment variable, then `default` in `~/.config/phv/config.toml`. `--vault` and `PHV_VAULT` each take a path or a registered vault name:
+
+```toml
+default = "maya"
+
+[vaults]
+maya = "/Users/example/health-vaults/maya"
+ben = "/Users/example/health-vaults/ben"
+```
 
 `phv init PATH` creates a data repo layout. It refuses to run inside a checkout whose `origin` remote is `recodelabs/phv`, and every command refuses a directory without `phv.toml`. This guards against personal data reaching the public code repo. The code repo's `.gitignore` also excludes `/records/`, `/sources/` and `/phv.toml`.
 
-In this sub-project, phv does not run Git in the data repo. The person reviews with `git diff` and commits what they accept, so an uncommitted change is an unreviewed change. Whether phv should later commit on the person's behalf is an open decision for a future sub-project.
+Git is optional, and no phv command needs it to work. Only `phv setup` runs `git` or `gh`, and only after the person agrees. In a vault with Git, the person reviews with `git diff` and commits what they accept, so an uncommitted change is an unreviewed change. Whether phv should later commit on the person's behalf is an open decision for a future sub-project.
+
+Without Git, a vault has no history and no undo. The person's confirmation before a write is the only review, and `phv replace` and `phv rm` warn that they cannot be undone.
+
+## Setup
+
+`phv setup` is an interactive walkthrough that creates one person's vault. Running it again adds another family member. It reads answers from stdin, so it also works with piped input.
+
+1. Ask for a short vault name, such as `maya`. Names use lowercase letters, numbers, `-` and `_`, and must not already be registered.
+2. Ask where to keep the vault, defaulting to `~/health-vaults/<name>`.
+3. Create the vault and register it. The first vault registered becomes the default.
+4. Ask for the person's name and birth date, and add their `Patient`. This step can be skipped.
+5. If `git` is installed, ask whether to use it, defaulting to yes, then run `git init` and make a first commit. If `git` is not installed, say so and continue without it.
+6. If the vault uses Git and `gh` is installed and logged in, explain what GitHub can read, then ask whether to create a private repo, defaulting to no. The answer is asked for every vault. phv always passes `--private` and has no option to create a public repo. If `gh` is missing or logged out, say how to set it up later and continue.
+
+A failed Git or GitHub step reports the problem and leaves the local vault in place.
+
+`phv vaults` lists registered vaults, and `phv use NAME` changes the default.
 
 ## Data repo layout
 
@@ -111,7 +137,7 @@ AI skills and other callers submit FHIR JSON. phv treats it as untrusted.
 5. **Add Provenance** when a source is given, as described below.
 6. **Write** under the lock. Each affected file is written to a temporary file in the same directory, flushed, then renamed over the original.
 
-A crash between two renames can leave some files updated. These changes are uncommitted, so `git status` shows them and `git restore` undoes them, and `phv check` reports any dangling references.
+A crash between two renames can leave some files updated. `phv check` reports any dangling references. In a vault with Git, these changes are uncommitted, so `git status` shows them and `git restore` undoes them.
 
 ## Validation
 
@@ -160,7 +186,7 @@ Reads load the NDJSON file for a resource type from the working tree. There is n
 
 Filtering uses FHIRPath expressions from `--where` or the `where` query parameter, evaluated against each resource and treated as true if the result is `true`.
 
-Dashboard and analytics queries belong to the warehouse in sub-project 6, built from the last commit so unreviewed changes stay out.
+Dashboard and analytics queries belong to the warehouse in sub-project 6. For a vault with Git, it is built from the last commit so unreviewed changes stay out.
 
 ## Interfaces
 
@@ -169,6 +195,9 @@ One package holds the library and a `phv` binary. Modules: `canon` (serializatio
 ### CLI
 
 ```text
+phv setup
+phv vaults
+phv use NAME
 phv init PATH
 phv validate FILE|-
 phv add FILE|- [--source SHA256 --agent NAME] [--recorded-at TIME] [--dry-run]
@@ -181,7 +210,7 @@ phv check
 phv serve [--port N]
 ```
 
-`phv rm` refuses to remove a resource that another resource references. Removing a line does not remove it from Git history; deleting it fully needs a history rewrite by the person.
+`phv rm` refuses to remove a resource that another resource references. In a vault with Git, removing a line does not remove it from history; deleting it fully needs a history rewrite by the person.
 
 `phv check` validates every line, and checks line order, ID uniqueness, dangling references and that every `DocumentReference` has its source file. It reports problems and changes nothing. After a manual Git merge, this is the way to confirm the vault is sound. A write refuses to touch a file that is out of order and points to `phv check`, rather than quietly rewriting it.
 
@@ -217,7 +246,7 @@ The flow:
 4. `phv validate` checks the Bundle. Claude fixes errors and validates again.
 5. The skill shows the person a table of what it extracted, next to what the report says, and asks for confirmation.
 6. `phv add --source SHA256 --agent phv-add-lab` writes the records.
-7. The skill tells the person to review with `git diff` and commit.
+7. If the vault has Git, the skill tells the person to review with `git diff` and commit. Otherwise it says the write is final, with no history to undo it.
 
 Rules the skill states:
 
@@ -230,9 +259,9 @@ Rules the skill states:
 ## Security
 
 - **AI output is untrusted:** a mapper can only propose resources through validation. It has no path to edit files through phv.
-- **No network use:** the core makes no outbound connections, and the test above keeps HTTP clients out of the build.
+- **No network use:** phv itself makes no outbound connections, and the test above keeps HTTP clients out of the build. The only network use is `git` and `gh`, run by `phv setup` when the person chooses GitHub.
 - **Data at rest:** files are readable on disk. For this sub-project, the person relies on full-disk encryption and a private repo.
-- **Remote copies:** pushing to a hosted private repo gives that host readable health data. Encryption before push must be solved before we recommend hosted backups. Until then, the docs will say so plainly.
+- **Remote copies:** pushing to a hosted private repo gives that host readable health data, including original documents. `phv setup` says this before asking, defaults to no, and asks for every vault. phv does not recommend hosted backups until encryption before push is solved, and the docs say so plainly.
 - **Git permanence:** deleted data stays in history until the person rewrites it, and in any existing remote copy after that.
 
 ## Testing
@@ -243,6 +272,7 @@ Rules the skill states:
 - **Validation:** for each resource type used in the first skills (Patient, Observation, DiagnosticReport, Condition, MedicationStatement, AllergyIntolerance, Immunization, DocumentReference, Provenance), one valid case and broken cases. Regression tests pin each spike finding.
 - **Rejection:** an invalid resource in a Bundle writes nothing at all.
 - **Interfaces:** CLI and API give the same results for the same input. The API rejects bad `Host` and `Origin` headers.
+- **Setup:** runs with no `git` on `PATH`, with Git declined, and with a fake `gh`. The GitHub repo is only created on an explicit yes and is always private. A second family member gets a separate vault.
 - **fhir-pipes compatibility:** CI runs `fhir-pipes views run` over a sample vault's `records/` directory.
 - **Build guard:** `cargo tree` check for HTTP clients and SQLite.
 

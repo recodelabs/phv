@@ -27,6 +27,7 @@
 | `src/read.rs` | Get and list with FHIRPath filters |
 | `src/check.rs` | Whole-vault consistency check |
 | `src/cli.rs`, `src/main.rs` | Command line |
+| `src/setup.rs` | Interactive `phv setup`, the only code that runs `git` or `gh` |
 | `src/api.rs` | Local REST API |
 | `data/required-valuesets.json` | Generated required code lists |
 | `scripts/gen_required_valuesets.py` | Generator for that file |
@@ -458,7 +459,7 @@ git commit -m "feat: add canonical JSON and content-derived IDs"
 `tests/store.rs`:
 
 ```rust
-use phv::store::{Change, Vault, line_id, resolve_vault_path};
+use phv::store::{Change, Registry, Vault, line_id, resolve_vault_path};
 use std::{fs, path::Path};
 
 const A: &str = r#"{"resourceType":"Observation","id":"a","v":1.50}"#;
@@ -611,8 +612,8 @@ fn line_id_reads_the_id_without_parsing() {
 }
 
 #[test]
-fn vault_path_precedence_is_flag_then_env_then_config() {
-    let config = "vault = \"/from/config\"\n";
+fn vault_path_precedence_is_flag_then_env_then_default() {
+    let config = "default = \"maya\"\n[vaults]\nmaya = \"/from/config\"\nben = \"/ben\"\n";
     let resolve = |flag: Option<&str>, env: Option<&str>, cfg: Option<&str>| {
         resolve_vault_path(flag.map(Path::new), env, cfg).unwrap()
     };
@@ -620,6 +621,48 @@ fn vault_path_precedence_is_flag_then_env_then_config() {
     assert_eq!(resolve(None, Some("/e"), Some(config)), Path::new("/e"));
     assert_eq!(resolve(None, None, Some(config)), Path::new("/from/config"));
     assert!(resolve_vault_path(None, None, None).is_err());
+}
+
+#[test]
+fn flag_and_env_accept_a_registered_name() {
+    let config = "[vaults]\nben = \"/ben\"\n";
+    assert_eq!(resolve_vault_path(Some(Path::new("ben")), None, Some(config)).unwrap(), Path::new("/ben"));
+    assert_eq!(resolve_vault_path(None, Some("ben"), Some(config)).unwrap(), Path::new("/ben"));
+    assert_eq!(resolve_vault_path(Some(Path::new("other")), None, Some(config)).unwrap(), Path::new("other"));
+}
+
+#[test]
+fn a_config_with_no_default_is_an_error_when_nothing_is_given() {
+    assert!(resolve_vault_path(None, None, Some("[vaults]\nben = \"/ben\"\n")).is_err());
+}
+
+#[test]
+fn registering_sets_the_first_default_and_refuses_duplicates() {
+    let mut registry = Registry::default();
+    registry.register("maya", Path::new("/maya")).unwrap();
+    registry.register("ben", Path::new("/ben")).unwrap();
+    assert_eq!(registry.default.as_deref(), Some("maya"));
+    assert!(registry.register("ben", Path::new("/other")).is_err());
+    assert_eq!(Registry::parse(&registry.to_toml()).unwrap(), registry);
+}
+
+#[test]
+fn only_simple_vault_names_are_allowed() {
+    let mut registry = Registry::default();
+    for bad in ["", "../x", "a/b", "Maya", "a b", ".hidden"] {
+        assert!(registry.register(bad, Path::new("/x")).is_err(), "{bad:?} should be refused");
+    }
+    assert!(registry.register("maya_2-b", Path::new("/x")).is_ok());
+}
+
+#[test]
+fn use_vault_changes_the_default_only_for_a_known_name() {
+    let mut registry = Registry::default();
+    registry.register("maya", Path::new("/maya")).unwrap();
+    registry.register("ben", Path::new("/ben")).unwrap();
+    registry.use_vault("ben").unwrap();
+    assert_eq!(registry.default.as_deref(), Some("ben"));
+    assert!(registry.use_vault("nobody").is_err());
 }
 ```
 
@@ -636,7 +679,7 @@ Add `pub mod store;` to `src/lib.rs`. Create `src/store.rs`:
 //! The data repo on disk. Lines are stored and copied as raw text, never re-serialized.
 
 use crate::error::{Issue, PhvError};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
@@ -657,30 +700,73 @@ struct VaultConfig {
     format_version: u32,
 }
 
-#[derive(Deserialize)]
-struct UserConfig {
-    vault: PathBuf,
+/// Named vaults, stored in `~/.config/phv/config.toml`.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Registry {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    #[serde(default)]
+    pub vaults: BTreeMap<String, PathBuf>,
 }
 
-/// Precedence: `--vault`, then `PHV_VAULT`, then `vault` in the user config.
+fn is_valid_vault_name(name: &str) -> bool {
+    name.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+}
+
+impl Registry {
+    pub fn parse(text: &str) -> Result<Self, PhvError> {
+        toml::from_str(text).map_err(|e| PhvError::Usage(format!("invalid ~/.config/phv/config.toml: {e}")))
+    }
+
+    pub fn to_toml(&self) -> String {
+        toml::to_string(self).expect("the registry serializes")
+    }
+
+    /// Adds a vault. The first one registered becomes the default.
+    pub fn register(&mut self, name: &str, path: &Path) -> Result<(), PhvError> {
+        if !is_valid_vault_name(name) {
+            return Err(PhvError::Usage(format!(
+                "invalid vault name {name:?}: use lowercase letters, numbers, - and _"
+            )));
+        }
+        if self.vaults.contains_key(name) {
+            return Err(PhvError::Usage(format!("a vault named {name} already exists")));
+        }
+        self.vaults.insert(name.to_string(), path.to_path_buf());
+        if self.default.is_none() {
+            self.default = Some(name.to_string());
+        }
+        Ok(())
+    }
+
+    pub fn use_vault(&mut self, name: &str) -> Result<(), PhvError> {
+        if !self.vaults.contains_key(name) {
+            return Err(PhvError::NotFound(format!("vault {name}: phv vaults lists them")));
+        }
+        self.default = Some(name.to_string());
+        Ok(())
+    }
+}
+
+/// Precedence: `--vault`, then `PHV_VAULT`, then `default` in the user config.
+/// `--vault` and `PHV_VAULT` take a registered name or a path.
 pub fn resolve_vault_path(
     flag: Option<&Path>,
     env: Option<&str>,
     config_text: Option<&str>,
 ) -> Result<PathBuf, PhvError> {
-    if let Some(path) = flag {
-        return Ok(path.to_path_buf());
+    let registry = config_text.map(Registry::parse).transpose()?.unwrap_or_default();
+    let given = flag.map(Path::to_path_buf).or_else(|| env.map(PathBuf::from));
+    if let Some(given) = given {
+        let named = given.to_str().and_then(|name| registry.vaults.get(name));
+        return Ok(named.cloned().unwrap_or(given));
     }
-    if let Some(path) = env {
-        return Ok(PathBuf::from(path));
-    }
-    if let Some(text) = config_text {
-        let config: UserConfig = toml::from_str(text)
-            .map_err(|e| PhvError::Usage(format!("invalid ~/.config/phv/config.toml: {e}")))?;
-        return Ok(config.vault);
+    if let Some(path) = registry.default.as_ref().and_then(|name| registry.vaults.get(name)) {
+        return Ok(path.clone());
     }
     Err(PhvError::Usage(
-        "no vault given: use --vault PATH, set PHV_VAULT, or set vault in ~/.config/phv/config.toml".into(),
+        "no vault given: run phv setup, use --vault, or set PHV_VAULT".into(),
     ))
 }
 
@@ -884,7 +970,7 @@ fn ensure_sorted(resource_type: &str, lines: &[String]) -> Result<(), PhvError> 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test --test store`
-Expected: 15 tests PASS.
+Expected: 19 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -3110,7 +3196,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             print_json(&serde_json::json!({"vault": vault.root()}));
         } else {
             println!("created vault at {}", vault.root().display());
-            println!("next: cd into it, run git init, and keep the repo private");
+            println!("keep it private. Git is optional: phv setup can set it up for you");
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -3152,7 +3238,7 @@ pub async fn run(cli: Cli) -> Result<ExitCode, PhvError> {
             if cli.json {
                 print_json(&serde_json::json!({"removed": target}));
             } else {
-                println!("removed {target}: it stays in Git history until you rewrite that history");
+                println!("removed {target}. In a vault with Git, it stays in history until you rewrite that history");
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -3635,6 +3721,554 @@ git commit -m "feat: add local REST API"
 
 ---
 
+### Task 12b: Interactive setup and named vaults
+
+**Run this task after Task 12 and before Task 13.**
+
+**Files:**
+- Create: `src/setup.rs`, `tests/setup.rs`
+- Modify: `src/cli.rs`, `src/lib.rs`
+
+- [ ] **Step 1: Write the failing tests**
+
+These run the real binary with a temporary `HOME` and a controlled `PATH`, so they cover a machine with no Git at all and use a fake `gh`.
+
+`tests/setup.rs`:
+
+```rust
+use std::{
+    fs,
+    io::Write,
+    os::unix::fs::{PermissionsExt, symlink},
+    path::{Path, PathBuf},
+    process::{Command, Output, Stdio},
+};
+
+struct Env {
+    _dir: tempfile::TempDir,
+    home: PathBuf,
+    bin: PathBuf,
+    gh_log: PathBuf,
+}
+
+/// An empty PATH directory, so `git` and `gh` are absent unless a test adds them.
+fn env() -> Env {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("home");
+    let bin = dir.path().join("bin");
+    fs::create_dir_all(&home).unwrap();
+    fs::create_dir_all(&bin).unwrap();
+    let gh_log = dir.path().join("gh.log");
+    Env { _dir: dir, home, bin, gh_log }
+}
+
+fn add_git(env: &Env) {
+    let path = std::env::var("PATH").unwrap();
+    let git = std::env::split_paths(&path).map(|d| d.join("git")).find(|p| p.exists()).expect("git is installed for tests");
+    symlink(git, env.bin.join("git")).unwrap();
+}
+
+/// A fake `gh` that records its arguments. `auth status` exits with `auth_code`.
+fn add_gh(env: &Env, auth_code: i32) {
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = auth ]; then exit {auth_code}; fi\necho \"$@\" >> {}\n",
+        env.gh_log.display()
+    );
+    let path = env.bin.join("gh");
+    fs::write(&path, script).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+fn phv(env: &Env, args: &[&str], answers: &[&str]) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_phv"))
+        .args(args)
+        .env("HOME", &env.home)
+        .env("PATH", &env.bin)
+        .env_remove("PHV_VAULT")
+        .env("GIT_AUTHOR_NAME", "test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.invalid")
+        .env("GIT_COMMITTER_NAME", "test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.invalid")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut text = answers.join("\n");
+    if !text.is_empty() {
+        text.push('\n');
+    }
+    let _ = child.stdin.take().unwrap().write_all(text.as_bytes());
+    child.wait_with_output().unwrap()
+}
+
+fn stdout(o: &Output) -> String {
+    String::from_utf8_lossy(&o.stdout).to_string()
+}
+
+fn vault(env: &Env, name: &str) -> PathBuf {
+    env.home.join("health-vaults").join(name)
+}
+
+// Answers: name, location, family, given, birth date, then the Git and GitHub questions.
+const PERSON: [&str; 5] = ["maya", "", "Example", "Maya", "1980-01-01"];
+
+fn answers(extra: &[&'static str]) -> Vec<&'static str> {
+    PERSON.iter().copied().chain(extra.iter().copied()).collect()
+}
+
+#[test]
+fn works_with_no_git_installed() {
+    let e = env();
+    let o = phv(&e, &["setup"], &answers(&[]));
+    assert!(o.status.success(), "{o:?}");
+    assert!(stdout(&o).contains("Git is not installed"), "{}", stdout(&o));
+    let root = vault(&e, "maya");
+    assert!(root.join("phv.toml").exists());
+    assert!(!root.join(".git").exists());
+    assert_eq!(fs::read_to_string(root.join("records/Patient.ndjson")).unwrap().lines().count(), 1);
+}
+
+#[test]
+fn git_can_be_declined() {
+    let e = env();
+    add_git(&e);
+    let o = phv(&e, &["setup"], &answers(&["n"]));
+    assert!(o.status.success(), "{o:?}");
+    assert!(!vault(&e, "maya").join(".git").exists());
+}
+
+#[test]
+fn accepting_git_makes_a_first_commit_and_skips_github_without_gh() {
+    let e = env();
+    add_git(&e);
+    let o = phv(&e, &["setup"], &answers(&[""]));
+    assert!(o.status.success(), "{o:?}");
+    assert!(vault(&e, "maya").join(".git").exists());
+    assert!(stdout(&o).contains("gh"), "{}", stdout(&o));
+    let log = Command::new(e.bin.join("git")).args(["-C", vault(&e, "maya").to_str().unwrap(), "log", "--oneline"]).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&log.stdout).lines().count(), 1);
+    let status = Command::new(e.bin.join("git")).args(["-C", vault(&e, "maya").to_str().unwrap(), "status", "--short"]).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&status.stdout), "");
+}
+
+#[test]
+fn github_defaults_to_no_and_warns_first() {
+    let e = env();
+    add_git(&e);
+    add_gh(&e, 0);
+    let o = phv(&e, &["setup"], &answers(&["", ""]));
+    assert!(o.status.success(), "{o:?}");
+    assert!(stdout(&o).contains("GitHub can read"), "{}", stdout(&o));
+    assert!(!e.gh_log.exists(), "gh must not run without a yes");
+}
+
+#[test]
+fn github_yes_creates_a_private_repo() {
+    let e = env();
+    add_git(&e);
+    add_gh(&e, 0);
+    let o = phv(&e, &["setup"], &answers(&["", "y", ""]));
+    assert!(o.status.success(), "{o:?}");
+    let log = fs::read_to_string(&e.gh_log).unwrap();
+    assert!(log.contains("repo create phv-vault-maya"), "{log}");
+    assert!(log.contains("--private"), "{log}");
+    assert!(log.contains("--push"), "{log}");
+    assert!(!log.contains("--public"), "{log}");
+}
+
+#[test]
+fn logged_out_gh_is_not_offered() {
+    let e = env();
+    add_git(&e);
+    add_gh(&e, 1);
+    let o = phv(&e, &["setup"], &answers(&[""]));
+    assert!(o.status.success(), "{o:?}");
+    assert!(stdout(&o).contains("gh auth login"), "{}", stdout(&o));
+    assert!(!e.gh_log.exists());
+}
+
+#[test]
+fn a_failed_github_step_keeps_the_local_vault() {
+    let e = env();
+    add_git(&e);
+    let path = e.bin.join("gh");
+    fs::write(&path, "#!/bin/sh\nif [ \"$1\" = auth ]; then exit 0; fi\nexit 1\n").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    let o = phv(&e, &["setup"], &answers(&["", "y", ""]));
+    assert!(o.status.success(), "{o:?}");
+    assert!(stdout(&o).contains("GitHub step failed"), "{}", stdout(&o));
+    assert!(vault(&e, "maya").join("phv.toml").exists());
+}
+
+#[test]
+fn each_family_member_gets_a_separate_vault() {
+    let e = env();
+    assert!(phv(&e, &["setup"], &answers(&[])).status.success());
+    let ben = ["ben", "", "Example", "Ben", "2015-06-01"];
+    assert!(phv(&e, &["setup"], &ben).status.success());
+
+    let listed = stdout(&phv(&e, &["vaults"], &[]));
+    assert!(listed.contains("maya") && listed.contains("ben"), "{listed}");
+    assert!(listed.lines().any(|l| l.starts_with("* maya")), "{listed}");
+
+    assert!(stdout(&phv(&e, &["list", "Patient"], &[])).contains("1980-01-01"));
+    assert!(stdout(&phv(&e, &["--vault", "ben", "list", "Patient"], &[])).contains("2015-06-01"));
+
+    assert!(phv(&e, &["use", "ben"], &[]).status.success());
+    assert!(stdout(&phv(&e, &["list", "Patient"], &[])).contains("2015-06-01"));
+    assert_eq!(phv(&e, &["use", "nobody"], &[]).status.code(), Some(2));
+}
+
+#[test]
+fn a_duplicate_or_invalid_name_is_refused() {
+    let e = env();
+    assert!(phv(&e, &["setup"], &answers(&[])).status.success());
+    assert_eq!(phv(&e, &["setup"], &answers(&[])).status.code(), Some(2));
+    assert_eq!(phv(&e, &["setup"], &["../evil"]).status.code(), Some(2));
+    assert!(!e.home.join("evil").exists());
+}
+
+#[test]
+fn a_bad_birth_date_is_asked_again_and_patient_can_be_skipped() {
+    let e = env();
+    let o = phv(&e, &["setup"], &["maya", "", "Example", "Maya", "not-a-date", "1980-01-01"]);
+    assert!(o.status.success(), "{o:?}");
+    assert!(stdout(&o).contains("1980-01-01"), "{}", stdout(&o));
+    assert!(fs::read_to_string(vault(&e, "maya").join("records/Patient.ndjson")).unwrap().contains("1980-01-01"));
+
+    let skipped = phv(&e, &["setup"], &["ben", "", "", "", ""]);
+    assert!(skipped.status.success(), "{skipped:?}");
+    assert!(!vault(&e, "ben").join("records/Patient.ndjson").exists());
+}
+
+#[test]
+fn running_out_of_answers_stops_instead_of_looping() {
+    let e = env();
+    assert_eq!(phv(&e, &["setup"], &["maya"]).status.code(), Some(2));
+}
+
+#[test]
+fn a_custom_location_is_used_and_tilde_is_expanded() {
+    let e = env();
+    let o = phv(&e, &["setup"], &["maya", "~/elsewhere/maya", "", "", ""]);
+    assert!(o.status.success(), "{o:?}");
+    assert!(e.home.join("elsewhere/maya/phv.toml").exists());
+}
+
+#[test]
+fn replace_and_rm_warn_when_a_vault_has_no_git() {
+    let e = env();
+    assert!(phv(&e, &["setup"], &answers(&[])).status.success());
+    let root: &Path = &vault(&e, "maya");
+    let line = fs::read_to_string(root.join("records/Patient.ndjson")).unwrap();
+    let id = line.split("\"id\":\"").nth(1).unwrap().split('"').next().unwrap().to_string();
+    let o = phv(&e, &["rm", &format!("Patient/{id}")], &[]);
+    assert!(o.status.success(), "{o:?}");
+    assert!(String::from_utf8_lossy(&o.stderr).contains("cannot be undone"), "{o:?}");
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cargo test --test setup`
+Expected: tests FAIL, because `setup`, `vaults` and `use` are not commands yet.
+
+- [ ] **Step 3: Implement setup**
+
+Add `pub mod setup;` to `src/lib.rs`. Create `src/setup.rs`:
+
+```rust
+//! Interactive walkthrough that creates one person's vault. This is the only place phv runs `git` or `gh`.
+
+use crate::error::PhvError;
+use crate::store::{Registry, Vault};
+use crate::write::{AddOptions, Phv};
+use serde_json::json;
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
+
+const GITHUB_WARNING: &str = "GitHub can read everything you push: phv does not encrypt it. That includes \
+health records and original documents, even in a private repo. phv does not recommend this until it supports \
+encrypted backups.";
+
+pub fn config_path(home: &Path) -> PathBuf {
+    home.join(".config/phv/config.toml")
+}
+
+pub fn load_registry(home: &Path) -> Result<Registry, PhvError> {
+    match std::fs::read_to_string(config_path(home)) {
+        Ok(text) => Registry::parse(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Registry::default()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+pub fn save_registry(home: &Path, registry: &Registry) -> Result<(), PhvError> {
+    let path = config_path(home);
+    let dir = path.parent().expect("the config path has a parent");
+    std::fs::create_dir_all(dir)?;
+    let mut temp = tempfile::NamedTempFile::new_in(dir)?;
+    temp.write_all(registry.to_toml().as_bytes())?;
+    temp.persist(&path).map_err(|e| PhvError::Io(e.error))?;
+    Ok(())
+}
+
+/// Prints a question and reads one line. Running out of input is an error, so setup cannot loop forever.
+fn ask(question: &str) -> Result<String, PhvError> {
+    print!("{question} ");
+    std::io::stdout().flush()?;
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line)? == 0 {
+        println!();
+        return Err(PhvError::Usage("setup stopped: no more input".into()));
+    }
+    Ok(line.trim().to_string())
+}
+
+fn expand_home(answer: &str, home: &Path) -> PathBuf {
+    match answer.strip_prefix("~/") {
+        Some(rest) => home.join(rest),
+        None => PathBuf::from(answer),
+    }
+}
+
+/// True if the command runs and exits successfully, with its output hidden.
+fn succeeds(program: &str, args: &[&str], dir: Option<&Path>) -> bool {
+    let mut command = Command::new(program);
+    command.args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    if let Some(dir) = dir {
+        command.current_dir(dir);
+    }
+    command.status().is_ok_and(|status| status.success())
+}
+
+async fn add_patient(root: &Path) -> Result<(), PhvError> {
+    let phv = Phv::new(Vault::open(root)?).await?;
+    println!("\nNow the person's details. Press Enter to skip any of them.");
+    let family = ask("Family name:")?;
+    let given = ask("Given name:")?;
+    loop {
+        let birth_date = ask("Birth date (YYYY-MM-DD):")?;
+        let mut patient = json!({"resourceType": "Patient"});
+        if !family.is_empty() || !given.is_empty() {
+            let mut name = json!({});
+            if !family.is_empty() {
+                name["family"] = json!(family);
+            }
+            if !given.is_empty() {
+                name["given"] = json!([given]);
+            }
+            patient["name"] = json!([name]);
+        }
+        if !birth_date.is_empty() {
+            patient["birthDate"] = json!(birth_date);
+        }
+        if patient.as_object().is_some_and(|p| p.len() == 1) {
+            println!("Skipped. You can add a Patient later with phv add.");
+            return Ok(());
+        }
+        match phv.add(&patient, &AddOptions::default()).await {
+            Ok(report) => {
+                println!("Added {} born {birth_date}.", report.created.join(", "));
+                return Ok(());
+            }
+            Err(PhvError::Invalid(issues)) => {
+                println!("That was not accepted: {}", issues.first().map_or_else(String::new, ToString::to_string));
+            }
+            Err(other) => return Err(other),
+        }
+    }
+}
+
+/// Returns true if the vault now uses Git.
+fn setup_git(root: &Path) -> Result<bool, PhvError> {
+    println!("\nGit keeps a history of every change, so you can review and undo them.");
+    if !succeeds("git", &["--version"], None) {
+        println!("Git is not installed, so this vault will have no history or undo. It works fine without it.");
+        return Ok(false);
+    }
+    let answer = ask("Use Git for this vault? [Y/n]")?;
+    if answer.eq_ignore_ascii_case("n") || answer.eq_ignore_ascii_case("no") {
+        println!("No Git. Changes will be final, with no history or undo.");
+        return Ok(false);
+    }
+    let ok = succeeds("git", &["init", "-q", "-b", "main"], Some(root))
+        && succeeds("git", &["add", "-A"], Some(root))
+        && succeeds("git", &["commit", "-qm", "Create health vault"], Some(root));
+    if ok {
+        println!("Created a Git repo with a first commit.");
+    } else {
+        println!("Git could not make the first commit. Set your name and email with git config, then commit in the vault.");
+    }
+    Ok(root.join(".git").exists())
+}
+
+fn setup_github(root: &Path, name: &str) -> Result<(), PhvError> {
+    if !succeeds("gh", &["--version"], None) {
+        println!("\nThe GitHub CLI (gh) is not installed, so there is no GitHub repo. This vault stays on this machine.");
+        return Ok(());
+    }
+    if !succeeds("gh", &["auth", "status"], None) {
+        println!("\ngh is not logged in, so there is no GitHub repo. To add one later, run gh auth login, then create a private repo.");
+        return Ok(());
+    }
+    println!("\n{GITHUB_WARNING}");
+    let answer = ask("Create a private GitHub repo for this vault? [y/N]")?;
+    if !(answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes")) {
+        println!("No GitHub repo. This vault stays on this machine.");
+        return Ok(());
+    }
+    let default_repo = format!("phv-vault-{name}");
+    let answer = ask(&format!("Repo name [{default_repo}]:"))?;
+    let repo = if answer.is_empty() { default_repo } else { answer };
+    let source = format!("--source={}", root.display());
+    // Always private. phv has no option to create a public repo.
+    if succeeds("gh", &["repo", "create", &repo, "--private", &source, "--remote=origin", "--push"], Some(root)) {
+        println!("Created private repo {repo} and pushed this vault.");
+    } else {
+        println!("GitHub step failed. Your local vault is fine. To retry, run: gh repo create {repo} --private --source=. --remote=origin --push");
+    }
+    Ok(())
+}
+
+pub async fn run(home: &Path) -> Result<(), PhvError> {
+    println!("This creates a health vault for one person. Run phv setup again for each family member.\n");
+    let mut registry = load_registry(home)?;
+
+    let name = ask("Short name for this vault, such as maya:")?;
+    let default_path = home.join("health-vaults").join(&name);
+    // Check the name before asking anything else or creating a folder from it.
+    let mut updated = registry.clone();
+    updated.register(&name, &default_path)?;
+
+    let answer = ask(&format!("Where should it live? [{}]", default_path.display()))?;
+    let root = if answer.is_empty() { default_path } else { expand_home(&answer, home) };
+
+    let vault = Vault::init(&root)?;
+    registry.register(&name, vault.root())?;
+    save_registry(home, &registry)?;
+    println!("Created {}.", vault.root().display());
+
+    add_patient(vault.root()).await?;
+
+    if setup_git(vault.root())? {
+        setup_github(vault.root(), &name)?;
+    }
+
+    println!("\nDone. Vault {name} is ready.");
+    if registry.default.as_deref() == Some(name.as_str()) {
+        println!("It is your default vault.");
+    } else {
+        println!("Use it with phv --vault {name}, or make it the default with phv use {name}.");
+    }
+    Ok(())
+}
+```
+
+- [ ] **Step 4: Add the commands**
+
+In `src/cli.rs`, add these variants to `Command`, before `Init`:
+
+```rust
+    /// Walk through creating a vault for one person. Run again for each family member.
+    Setup,
+    /// List registered vaults. The default is marked with *.
+    Vaults,
+    /// Change the default vault.
+    Use { name: String },
+```
+
+Add this helper near `vault_path`:
+
+```rust
+fn home_dir() -> Result<PathBuf, PhvError> {
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| PhvError::Usage("HOME is not set".into()))
+}
+
+/// Without Git, these changes have no history to restore from.
+fn warn_if_no_history(phv: &Phv) {
+    if !phv.vault().root().join(".git").exists() {
+        eprintln!("warning: this vault has no Git history, so this change cannot be undone");
+    }
+}
+```
+
+At the start of `run`, before the `Init` handling, add:
+
+```rust
+    match &cli.command {
+        Command::Setup => {
+            crate::setup::run(&home_dir()?).await?;
+            return Ok(ExitCode::SUCCESS);
+        }
+        Command::Vaults => {
+            let registry = crate::setup::load_registry(&home_dir()?)?;
+            if cli.json {
+                print_json(&registry);
+            } else if registry.vaults.is_empty() {
+                println!("no vaults yet: run phv setup");
+            } else {
+                for (name, path) in &registry.vaults {
+                    let mark = if registry.default.as_deref() == Some(name) { "*" } else { " " };
+                    println!("{mark} {name}  {}", path.display());
+                }
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+        Command::Use { name } => {
+            let home = home_dir()?;
+            let mut registry = crate::setup::load_registry(&home)?;
+            registry.use_vault(name)?;
+            crate::setup::save_registry(&home, &registry)?;
+            println!("default vault is now {name}");
+            return Ok(ExitCode::SUCCESS);
+        }
+        _ => {}
+    }
+```
+
+In the later `match cli.command`, change the unreachable arm to cover the new variants:
+
+```rust
+        Command::Setup | Command::Vaults | Command::Use { .. } | Command::Init { .. } => {
+            unreachable!("handled above")
+        }
+```
+
+Call `warn_if_no_history(&phv);` after a real write in two arms:
+
+- In `Command::Rm`, right after `phv.remove(resource_type, id).await?;`.
+- In `Command::Replace`, right after `print_write(&report, cli.json);`, only when `!dry_run && !report.updated.is_empty()`.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cargo test --test setup`
+Expected: 14 tests PASS. Then run `cargo test` for the full suite.
+
+- [ ] **Step 6: Try it by hand**
+
+```bash
+export HOME=$(mktemp -d)
+cargo run -q -- setup
+```
+
+Answer as a person would, using made-up details, and read the prompts for anything confusing. Run this from a subshell or restore `HOME` afterwards. Fix unclear wording and report it.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/setup.rs src/cli.rs src/lib.rs tests/setup.rs
+git commit -m "feat: add interactive setup and named vaults"
+```
+
+---
+
 ### Task 13: Small diff guarantee in real Git
 
 **Files:**
@@ -3773,7 +4407,7 @@ You map the document to FHIR. The `phv` binary validates and writes it.
 
 ### 1. Find the vault
 
-Run `phv list Patient`. If it reports that no vault is set, ask the person for the path and pass `--vault PATH`, or suggest `phv init PATH` for a new vault.
+Run `phv vaults` and `phv list Patient`. If several vaults exist, ask whose record this is and pass `--vault NAME` on every command. If no vault is set up, tell the person to run `phv setup` in their own terminal, because it asks them questions.
 
 If no Patient exists, ask for name and birth date, and add one:
 
@@ -3857,12 +4491,14 @@ phv add /tmp/bundle.json --source <sha256> --agent phv-add-lab
 
 ### 7. Finish
 
-Report what was created, then tell the person to review and commit it in the vault:
+Report what was created. If the vault has a `.git` folder, tell the person to review and commit it:
 
 ```bash
 git diff
 git add -A && git commit -m "Add lab results from YYYY-MM-DD"
 ```
+
+If it has no `.git` folder, tell them the write is final: there is no history to undo it, and `phv replace` is the way to correct a record.
 
 Delete the temporary Bundle file. It contains health data.
 ````
@@ -4037,9 +4673,9 @@ Expected: a CSV with two rows and exit status 0. If fhir-pipes writes `1.5`, rem
 ````markdown
 # phv: personal health vault
 
-phv keeps your health records as FHIR R4 files on your own machine, with Git for history. AI can help map your documents to FHIR, while phv itself validates and writes every record.
+phv keeps your health records as FHIR R4 files on your own machine. AI can help map your documents to FHIR, while phv itself validates and writes every record. Git is optional and adds history and undo.
 
-**This repo holds code only.** Your health data belongs in a separate, private repo. Never commit it here.
+**This repo holds code only.** Your health data belongs in a separate, private vault. Never commit it here.
 
 ## Status
 
@@ -4056,15 +4692,18 @@ cargo install --path . --locked
 ## Quick start
 
 ```bash
-phv init ~/my-health-data
-cd ~/my-health-data && git init
-export PHV_VAULT=~/my-health-data
-
-echo '{"resourceType":"Patient","birthDate":"1980-01-01"}' | phv add -
-phv list Patient
+phv setup
 ```
 
-Review changes with `git diff`, then commit the ones you accept. phv does not run Git for you.
+`setup` walks you through creating a vault for one person. Run it again for each family member. It asks whether to use Git and whether to create a private GitHub repo, and you can say no to both.
+
+```bash
+phv vaults                     # list vaults
+phv use ben                    # change the default
+phv --vault maya list Patient  # use a specific vault
+```
+
+With Git, review changes with `git diff` and commit the ones you accept. Without Git, there is no history, so `phv replace` and `phv rm` cannot be undone.
 
 ## Add a lab result with Claude
 
@@ -4080,7 +4719,10 @@ Claude stores the original file, maps the results to FHIR and shows you what it 
 
 | Command | Purpose |
 |---|---|
-| `phv init PATH` | Create a data repo layout |
+| `phv setup` | Walk through creating a vault for one person |
+| `phv vaults` | List registered vaults |
+| `phv use NAME` | Change the default vault |
+| `phv init PATH` | Create a vault folder with no prompts |
 | `phv validate FILE` | Check a resource or Bundle without writing |
 | `phv add FILE` | Validate and write a resource or Bundle |
 | `phv replace Type/id FILE` | Replace a resource, keeping its ID |
@@ -4096,8 +4738,8 @@ Use `-` as `FILE` for stdin, and `--json` for machine-readable output.
 ## Privacy and security
 
 - **Readable files:** records are not encrypted by phv. Use full-disk encryption and keep your repo private.
-- **Hosted repos:** pushing to a hosted private repo gives that host readable health data. phv has no encrypted backup yet.
-- **Git history:** `phv rm` removes a record from the files, but it stays in history until you rewrite it, and in any remote copies after that.
+- **Hosted repos:** pushing to a hosted private repo, including one created by `phv setup`, gives that host readable health data and original documents. phv has no encrypted backup yet, so it does not recommend this.
+- **Git history:** in a vault with Git, `phv rm` removes a record from the files, but it stays in history until you rewrite it, and in any remote copies after that.
 - **AI tools:** anything you send to a hosted AI is subject to that provider's terms. Use a local model for data that must stay on your device.
 - **Not medical advice:** check every extracted value against the original document. phv checks the structure of records, not whether a value was read correctly.
 
