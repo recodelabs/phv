@@ -1,2 +1,0 @@
-{"resourceType":"Observation","id":"sample0000000000000000000000000b","code":{"text":"Creatinine"},"effectiveDateTime":"2026-03-14","status":"final","subject":{"reference":"Patient/sample0000000000000000000000000a"},"valueQuantity":{"unit":"mg/dL","value":1.50}}
-{"resourceType":"Observation","id":"sample0000000000000000000000000c","code":{"text":"Sodium"},"effectiveDateTime":"2026-03-14","status":"final","subject":{"reference":"Patient/sample0000000000000000000000000a"},"valueQuantity":{"unit":"mmol/L","value":140}}

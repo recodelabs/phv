@@ -41,7 +41,7 @@ Keep the reference it prints, such as `Patient/abc123`. For a standalone draft, 
 ## 2. Store the original
 
 ```bash
-phv source add path/to/report.pdf
+phv source add --category lab path/to/report.pdf
 ```
 
 Keep the `sha256` it prints. If it says `already imported`, tell the person and ask whether to continue, because re-adding may create duplicates. A draft skips this step, and records the file's relative path, SHA-256 and page numbers in the private review file.

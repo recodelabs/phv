@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Claims{% endblock %}
+{% block main %}
+<h1>Claims</h1>
+<p class="sub">What was billed, what the plan paid and what fell to the patient.</p>
+<div id="claim-list">
+{% let vault = &chrome.vault %}
+{% include "claims_list.html" %}
+</div>
+{% endblock %}

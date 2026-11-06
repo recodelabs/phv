@@ -1,0 +1,16 @@
+{% if crate::browser::model::claims::any_drawn(segments) %}
+<svg class="split-bar" width="100%" height="16" role="img" aria-label="How the charges divided up. The amounts are listed below.">
+  {% for segment in segments %}{% if segment.drawn %}
+  <rect class="{{ segment.class }}" x="{{ segment.x }}" width="{{ segment.width }}" y="0" height="16"><title>{{ segment.label }}: {{ segment.amount }} ({{ segment.percent }})</title></rect>
+  {% endif %}{% endfor %}
+</svg>
+{% endif %}
+<div class="tiles">
+  {% for segment in segments %}
+  <div class="tile" title="{{ segment.note }}">
+    <b>{{ segment.amount }}</b>
+    <span><i class="swatch {{ segment.class }}"></i>{{ segment.label }}{% if !segment.percent.is_empty() %} · {{ segment.percent }}{% endif %}</span>
+    <small>{{ segment.note }}</small>
+  </div>
+  {% endfor %}
+</div>

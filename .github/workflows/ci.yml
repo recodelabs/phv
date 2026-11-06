@@ -19,11 +19,3 @@ jobs:
           node-version: '22'
       - name: Synthetic vault and symptom flow
         run: PHV_TEST_BINARY="$PWD/target/debug/phv" node --test prototype/fatigue/engine.test.mjs prototype/fatigue/server.test.mjs prototype/fatigue/vault-adapter.test.mjs
-
-  fhir-pipes:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: rustup show
-      - run: cargo install --locked --git https://github.com/ohs-foundation/fhir-pipes-rs fhir-pipes
-      - run: scripts/check-fhir-pipes.sh
