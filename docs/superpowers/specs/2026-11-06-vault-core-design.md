@@ -340,7 +340,7 @@ Each gets its own spec and plan.
 3. **Health memory and AI access:** attributed entries for mood, sleep and diet, with AI inferences labeled as such and left out of doctor summaries by default, plus limits on what an MCP session can read.
 4. **Summaries:** IPS documents and narratives. Validate each entry against its IPS profile, loaded from package snapshots, add Bundle-level checks in phv, and run the HL7 Java validator in CI. The spike showed that octofhir's full Bundle profile check is not usable yet.
 5. **Importers:** HealthKit, Strava and others as plain code, with the notes below.
-6. **Warehouse and dashboard:** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload.
+6. **Warehouse and dashboard:** a Parquet warehouse built with `fhir-pipes refresh` from the last commit, a small React dashboard and browser upload. `fhir-pipes` reads vault records, but `views run` wrote `1.50` as `1.5` in a test with v0.6.0. The vault keeps the exact value, so anything needing the printed precision must read the vault, not the warehouse.
 
 ### Notes for the importer sub-project
 

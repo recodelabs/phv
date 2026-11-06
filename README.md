@@ -93,3 +93,7 @@ Use `-` as `FILE` for stdin, and `--json` for machine-readable output.
 ## Design
 
 See [the vault core design](docs/superpowers/specs/2026-11-06-vault-core-design.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
