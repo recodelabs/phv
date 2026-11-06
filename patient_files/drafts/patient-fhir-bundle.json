@@ -1,0 +1,1876 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:c67c13fe-2d9f-4689-b88f-1a6de7ac4b09",
+      "resource": {
+        "resourceType": "Organization",
+        "active": true,
+        "identifier": [
+          {
+            "system": "http://hl7.org/fhir/sid/us-npi",
+            "value": "1144221847"
+          }
+        ],
+        "name": "Riverside Community Health Clinic",
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "(555) 010-2000",
+            "use": "work"
+          }
+        ],
+        "address": [
+          {
+            "line": [
+              "400 Riverside Drive"
+            ],
+            "city": "Springfield",
+            "state": "IL",
+            "postalCode": "62701",
+            "country": "US"
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Organization"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+      "resource": {
+        "resourceType": "Practitioner",
+        "active": true,
+        "identifier": [
+          {
+            "system": "http://hl7.org/fhir/sid/us-npi",
+            "value": "1234567893"
+          }
+        ],
+        "name": [
+          {
+            "family": "Chen",
+            "given": [
+              "James"
+            ],
+            "prefix": [
+              "Dr."
+            ],
+            "suffix": [
+              "MD"
+            ]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "(555) 010-2045",
+            "use": "work"
+          }
+        ],
+        "gender": "male"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Practitioner"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+      "resource": {
+        "resourceType": "Patient",
+        "extension": [
+          {
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "system": "urn:oid:2.16.840.1.113883.6.238",
+                  "code": "2106-3",
+                  "display": "White"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "White"
+              }
+            ]
+          },
+          {
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "system": "urn:oid:2.16.840.1.113883.6.238",
+                  "code": "2135-2",
+                  "display": "Hispanic or Latino"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Hispanic or Latino"
+              }
+            ]
+          }
+        ],
+        "identifier": [
+          {
+            "use": "usual",
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MR",
+                  "display": "Medical record number"
+                }
+              ]
+            },
+            "system": "http://riverside-clinic.example.org/mrn",
+            "value": "MRN-00482931",
+            "assigner": {
+              "reference": "urn:uuid:c67c13fe-2d9f-4689-b88f-1a6de7ac4b09",
+              "display": "Riverside Community Health Clinic"
+            }
+          },
+          {
+            "use": "official",
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "SS",
+                  "display": "Social Security number"
+                }
+              ]
+            },
+            "system": "http://hl7.org/fhir/sid/us-ssn",
+            "value": "999-45-6789"
+          },
+          {
+            "use": "secondary",
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MB",
+                  "display": "Member Number"
+                }
+              ]
+            },
+            "system": "http://example-health-plan.org/member-id",
+            "value": "EHP-77120034"
+          }
+        ],
+        "active": true,
+        "name": [
+          {
+            "use": "official",
+            "family": "Rodriguez",
+            "given": [
+              "Maria",
+              "Elena"
+            ]
+          },
+          {
+            "use": "nickname",
+            "given": [
+              "Marie"
+            ]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "(555) 014-3321",
+            "use": "mobile",
+            "rank": 1
+          },
+          {
+            "system": "phone",
+            "value": "(555) 014-8870",
+            "use": "home",
+            "rank": 2
+          },
+          {
+            "system": "email",
+            "value": "maria.rodriguez@example.com",
+            "use": "home"
+          }
+        ],
+        "gender": "female",
+        "birthDate": "1968-03-14",
+        "address": [
+          {
+            "use": "home",
+            "type": "physical",
+            "line": [
+              "1287 Maple Avenue",
+              "Apt 4B"
+            ],
+            "city": "Springfield",
+            "state": "IL",
+            "postalCode": "62704",
+            "country": "US"
+          }
+        ],
+        "maritalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+              "code": "M",
+              "display": "Married"
+            }
+          ]
+        },
+        "contact": [
+          {
+            "relationship": [
+              {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/v2-0131",
+                    "code": "N",
+                    "display": "Next-of-Kin"
+                  }
+                ]
+              }
+            ],
+            "name": {
+              "family": "Rodriguez",
+              "given": [
+                "Carlos"
+              ]
+            },
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "(555) 014-5502",
+                "use": "mobile"
+              }
+            ],
+            "gender": "male"
+          }
+        ],
+        "communication": [
+          {
+            "language": {
+              "coding": [
+                {
+                  "system": "urn:ietf:bcp:47",
+                  "code": "es",
+                  "display": "Spanish"
+                }
+              ]
+            },
+            "preferred": true
+          },
+          {
+            "language": {
+              "coding": [
+                {
+                  "system": "urn:ietf:bcp:47",
+                  "code": "en-US",
+                  "display": "English (United States)"
+                }
+              ]
+            }
+          }
+        ],
+        "generalPractitioner": [
+          {
+            "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+            "display": "Dr. James Chen, MD"
+          }
+        ],
+        "managingOrganization": {
+          "reference": "urn:uuid:c67c13fe-2d9f-4689-b88f-1a6de7ac4b09",
+          "display": "Riverside Community Health Clinic"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ecf94623-2cc0-429d-b79d-cf9bce1c81f8",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active",
+              "display": "Active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "problem-list-item",
+                "display": "Problem List Item"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "44054006",
+              "display": "Diabetes mellitus type 2"
+            }
+          ],
+          "text": "Type 2 diabetes mellitus"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "onsetDateTime": "2019-06-02",
+        "recordedDate": "2019-06-02",
+        "recorder": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Condition"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5bcba524-2adc-424b-8b90-2a5ccef49b2a",
+      "resource": {
+        "resourceType": "Condition",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active",
+              "display": "Active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "problem-list-item",
+                "display": "Problem List Item"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "38341003",
+              "display": "Hypertensive disorder, systemic arterial"
+            }
+          ],
+          "text": "Essential hypertension"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "onsetDateTime": "2017-11-20",
+        "recordedDate": "2017-11-20",
+        "recorder": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Condition"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342",
+      "resource": {
+        "resourceType": "Encounter",
+        "identifier": [
+          {
+            "system": "http://riverside-clinic.example.org/encounter",
+            "value": "ENC-2026-1015-0042"
+          }
+        ],
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "AMB",
+          "display": "ambulatory"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "390906007",
+                "display": "Follow-up encounter"
+              }
+            ],
+            "text": "Diabetes / hypertension follow-up visit"
+          }
+        ],
+        "priority": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActPriority",
+              "code": "R",
+              "display": "routine"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "participant": [
+          {
+            "type": [
+              {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+                    "code": "PPRF",
+                    "display": "primary performer"
+                  }
+                ]
+              }
+            ],
+            "period": {
+              "start": "2026-10-15T09:30:00-05:00",
+              "end": "2026-10-15T10:15:00-05:00"
+            },
+            "individual": {
+              "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+              "display": "Dr. James Chen, MD"
+            }
+          }
+        ],
+        "period": {
+          "start": "2026-10-15T09:30:00-05:00",
+          "end": "2026-10-15T10:15:00-05:00"
+        },
+        "length": {
+          "value": 45,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "reasonReference": [
+          {
+            "reference": "urn:uuid:ecf94623-2cc0-429d-b79d-cf9bce1c81f8",
+            "display": "Type 2 diabetes mellitus"
+          },
+          {
+            "reference": "urn:uuid:5bcba524-2adc-424b-8b90-2a5ccef49b2a",
+            "display": "Essential hypertension"
+          }
+        ],
+        "serviceProvider": {
+          "reference": "urn:uuid:c67c13fe-2d9f-4689-b88f-1a6de7ac4b09",
+          "display": "Riverside Community Health Clinic"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Encounter"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:df139d7d-7cd6-4305-8a84-95bef0378e6a",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "85354-9",
+              "display": "Blood pressure panel with all children optional"
+            }
+          ],
+          "text": "Blood pressure"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "effectiveDateTime": "2026-10-15T09:40:00-05:00",
+        "performer": [
+          {
+            "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+            "display": "Dr. James Chen, MD"
+          }
+        ],
+        "interpretation": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                "code": "H",
+                "display": "High"
+              }
+            ]
+          }
+        ],
+        "component": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8480-6",
+                  "display": "Systolic blood pressure"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 142,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            },
+            "interpretation": [
+              {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                    "code": "H",
+                    "display": "High"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8462-4",
+                  "display": "Diastolic blood pressure"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 88,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            },
+            "interpretation": [
+              {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                    "code": "H",
+                    "display": "High"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:9abe5fc2-825a-4a97-af20-857ad0d81a91",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ],
+          "text": "Heart rate"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "effectiveDateTime": "2026-10-15T09:40:00-05:00",
+        "performer": [
+          {
+            "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+            "display": "Dr. James Chen, MD"
+          }
+        ],
+        "valueQuantity": {
+          "value": 76,
+          "unit": "beats/minute",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "interpretation": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                "code": "N",
+                "display": "Normal"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7a10b5c1-f7f5-4def-9c14-c5a59babad21",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "29463-7",
+              "display": "Body weight"
+            }
+          ],
+          "text": "Body weight"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "effectiveDateTime": "2026-10-15T09:40:00-05:00",
+        "performer": [
+          {
+            "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+            "display": "Dr. James Chen, MD"
+          }
+        ],
+        "valueQuantity": {
+          "value": 88.5,
+          "unit": "kg",
+          "system": "http://unitsofmeasure.org",
+          "code": "kg"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:16af630d-b3ef-440e-b8e0-724bdaebf2ea",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8302-2",
+              "display": "Body height"
+            }
+          ],
+          "text": "Body height"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "effectiveDateTime": "2026-10-15T09:40:00-05:00",
+        "performer": [
+          {
+            "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+            "display": "Dr. James Chen, MD"
+          }
+        ],
+        "valueQuantity": {
+          "value": 165,
+          "unit": "cm",
+          "system": "http://unitsofmeasure.org",
+          "code": "cm"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b3af225b-5401-49d2-9606-462bdc73920d",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "39156-5",
+              "display": "Body mass index (BMI) [Ratio]"
+            }
+          ],
+          "text": "BMI"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "effectiveDateTime": "2026-10-15T09:40:00-05:00",
+        "performer": [
+          {
+            "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+            "display": "Dr. James Chen, MD"
+          }
+        ],
+        "valueQuantity": {
+          "value": 32.5,
+          "unit": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "code": "kg/m2"
+        },
+        "interpretation": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                "code": "H",
+                "display": "High"
+              }
+            ]
+          }
+        ],
+        "derivedFrom": [
+          {
+            "reference": "urn:uuid:7a10b5c1-f7f5-4def-9c14-c5a59babad21",
+            "display": "Body weight"
+          },
+          {
+            "reference": "urn:uuid:16af630d-b3ef-440e-b8e0-724bdaebf2ea",
+            "display": "Body height"
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fdcaa327-3a4b-4586-aba4-9804edc6513e",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "4548-4",
+              "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "effectiveDateTime": "2026-10-15T09:55:00-05:00",
+        "issued": "2026-10-15T14:22:00-05:00",
+        "performer": [
+          {
+            "reference": "urn:uuid:c67c13fe-2d9f-4689-b88f-1a6de7ac4b09",
+            "display": "Riverside Community Health Clinic"
+          }
+        ],
+        "valueQuantity": {
+          "value": 7.8,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        },
+        "interpretation": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                "code": "H",
+                "display": "High"
+              }
+            ]
+          }
+        ],
+        "specimen": {
+          "display": "Venous blood"
+        },
+        "referenceRange": [
+          {
+            "low": {
+              "value": 4.0,
+              "unit": "%",
+              "system": "http://unitsofmeasure.org",
+              "code": "%"
+            },
+            "high": {
+              "value": 5.6,
+              "unit": "%",
+              "system": "http://unitsofmeasure.org",
+              "code": "%"
+            },
+            "text": "4.0-5.6 %"
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:196df084-3b6f-45b4-8936-87aa4305cf2c",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "1558-6",
+              "display": "Fasting glucose [Mass/volume] in Serum or Plasma"
+            }
+          ],
+          "text": "Fasting glucose"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "effectiveDateTime": "2026-10-15T09:55:00-05:00",
+        "issued": "2026-10-15T14:22:00-05:00",
+        "performer": [
+          {
+            "reference": "urn:uuid:c67c13fe-2d9f-4689-b88f-1a6de7ac4b09",
+            "display": "Riverside Community Health Clinic"
+          }
+        ],
+        "valueQuantity": {
+          "value": 148,
+          "unit": "mg/dL",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg/dL"
+        },
+        "interpretation": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                "code": "H",
+                "display": "High"
+              }
+            ]
+          }
+        ],
+        "specimen": {
+          "display": "Venous blood"
+        },
+        "referenceRange": [
+          {
+            "low": {
+              "value": 70,
+              "unit": "mg/dL",
+              "system": "http://unitsofmeasure.org",
+              "code": "mg/dL"
+            },
+            "high": {
+              "value": 99,
+              "unit": "mg/dL",
+              "system": "http://unitsofmeasure.org",
+              "code": "mg/dL"
+            },
+            "text": "70-99 mg/dL"
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Observation"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a5d94eca-98b3-4d93-a326-426fd12a9c7e",
+      "resource": {
+        "resourceType": "Medication",
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "861007",
+              "display": "metformin hydrochloride 500 MG Oral Tablet"
+            }
+          ],
+          "text": "Metformin 500 mg tablet"
+        },
+        "status": "active",
+        "form": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "385055001",
+              "display": "Tablet"
+            }
+          ]
+        },
+        "ingredient": [
+          {
+            "itemCodeableConcept": {
+              "text": "Metformin"
+            },
+            "isActive": true,
+            "strength": {
+              "numerator": {
+                "value": 500,
+                "unit": "mg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mg"
+              },
+              "denominator": {
+                "value": 1,
+                "unit": "tablet",
+                "system": "http://unitsofmeasure.org",
+                "code": "{tbl}"
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Medication"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8ee12e7c-a371-4a96-87a8-914e3bc2e3d2",
+      "resource": {
+        "resourceType": "Medication",
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "314076",
+              "display": "lisinopril 10 MG Oral Tablet"
+            }
+          ],
+          "text": "Lisinopril 10 mg tablet"
+        },
+        "status": "active",
+        "form": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "385055001",
+              "display": "Tablet"
+            }
+          ]
+        },
+        "ingredient": [
+          {
+            "itemCodeableConcept": {
+              "text": "Lisinopril"
+            },
+            "isActive": true,
+            "strength": {
+              "numerator": {
+                "value": 10,
+                "unit": "mg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mg"
+              },
+              "denominator": {
+                "value": 1,
+                "unit": "tablet",
+                "system": "http://unitsofmeasure.org",
+                "code": "{tbl}"
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Medication"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5c5b10bb-1244-4bff-b1d5-8e00bc0346ca",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "intent": "order",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+                "code": "community",
+                "display": "Community"
+              }
+            ]
+          }
+        ],
+        "medicationReference": {
+          "reference": "urn:uuid:a5d94eca-98b3-4d93-a326-426fd12a9c7e",
+          "display": "Metformin 500 mg tablet"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "authoredOn": "2026-10-15T10:10:00-05:00",
+        "requester": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        },
+        "reasonReference": [
+          {
+            "reference": "urn:uuid:ecf94623-2cc0-429d-b79d-cf9bce1c81f8",
+            "display": "Type 2 diabetes mellitus"
+          }
+        ],
+        "dosageInstruction": [
+          {
+            "sequence": 1,
+            "text": "Take 1 tablet by mouth twice daily with meals",
+            "timing": {
+              "repeat": {
+                "frequency": 2,
+                "period": 1,
+                "periodUnit": "d",
+                "when": [
+                  "CM"
+                ]
+              }
+            },
+            "route": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "26643006",
+                  "display": "Oral route"
+                }
+              ]
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 1,
+                  "unit": "tablet",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "{tbl}"
+                }
+              }
+            ]
+          }
+        ],
+        "dispenseRequest": {
+          "numberOfRepeatsAllowed": 3,
+          "quantity": {
+            "value": 180,
+            "unit": "tablet",
+            "system": "http://unitsofmeasure.org",
+            "code": "{tbl}"
+          },
+          "expectedSupplyDuration": {
+            "value": 90,
+            "unit": "days",
+            "system": "http://unitsofmeasure.org",
+            "code": "d"
+          }
+        },
+        "substitution": {
+          "allowedBoolean": true
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "MedicationRequest"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ca85e228-51f0-441e-9a86-9ffff9c47a11",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "intent": "order",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+                "code": "community",
+                "display": "Community"
+              }
+            ]
+          }
+        ],
+        "medicationReference": {
+          "reference": "urn:uuid:8ee12e7c-a371-4a96-87a8-914e3bc2e3d2",
+          "display": "Lisinopril 10 mg tablet"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "authoredOn": "2026-10-15T10:10:00-05:00",
+        "requester": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        },
+        "reasonReference": [
+          {
+            "reference": "urn:uuid:5bcba524-2adc-424b-8b90-2a5ccef49b2a",
+            "display": "Essential hypertension"
+          }
+        ],
+        "dosageInstruction": [
+          {
+            "sequence": 1,
+            "text": "Take 1 tablet by mouth once daily",
+            "timing": {
+              "repeat": {
+                "frequency": 1,
+                "period": 1,
+                "periodUnit": "d"
+              }
+            },
+            "route": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "26643006",
+                  "display": "Oral route"
+                }
+              ]
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 1,
+                  "unit": "tablet",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "{tbl}"
+                }
+              }
+            ]
+          }
+        ],
+        "dispenseRequest": {
+          "numberOfRepeatsAllowed": 3,
+          "quantity": {
+            "value": 90,
+            "unit": "tablet",
+            "system": "http://unitsofmeasure.org",
+            "code": "{tbl}"
+          },
+          "expectedSupplyDuration": {
+            "value": 90,
+            "unit": "days",
+            "system": "http://unitsofmeasure.org",
+            "code": "d"
+          }
+        },
+        "substitution": {
+          "allowedBoolean": true
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "MedicationRequest"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b125e9c8-83d4-4030-9f1d-602a37676e50",
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+              "code": "active",
+              "display": "Active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "type": "allergy",
+        "category": [
+          "medication"
+        ],
+        "criticality": "low",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "373270004",
+              "display": "Substance with penicillin structure and antibacterial mechanism of action (substance)"
+            }
+          ],
+          "text": "Penicillin"
+        },
+        "patient": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "onsetDateTime": "1995",
+        "recordedDate": "2017-11-20",
+        "recorder": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        },
+        "reaction": [
+          {
+            "substance": {
+              "text": "Amoxicillin"
+            },
+            "manifestation": [
+              {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "247472004",
+                    "display": "Wheal"
+                  }
+                ],
+                "text": "Hives"
+              }
+            ],
+            "description": "Generalized hives within 2 hours of first amoxicillin dose; resolved with antihistamine.",
+            "onset": "1995",
+            "severity": "moderate",
+            "exposureRoute": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "26643006",
+                  "display": "Oral route"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "AllergyIntolerance"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2d17a4d6-a340-4adc-a5d8-7de5fa8725f9",
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+              "code": "active",
+              "display": "Active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "type": "allergy",
+        "category": [
+          "food"
+        ],
+        "criticality": "high",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "227493005",
+              "display": "Cashew nuts"
+            }
+          ],
+          "text": "Cashew nut"
+        },
+        "patient": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "onsetDateTime": "2004-08-12",
+        "recordedDate": "2017-11-20",
+        "recorder": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        },
+        "lastOccurrence": "2004-08-12",
+        "note": [
+          {
+            "text": "Carries epinephrine auto-injector."
+          }
+        ],
+        "reaction": [
+          {
+            "substance": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "227493005",
+                  "display": "Cashew nuts"
+                }
+              ]
+            },
+            "manifestation": [
+              {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "39579001",
+                    "display": "Anaphylactic reaction"
+                  }
+                ],
+                "text": "Anaphylaxis"
+              }
+            ],
+            "description": "Throat swelling and wheezing after eating cashew chicken; treated in ED with epinephrine.",
+            "onset": "2004-08-12",
+            "severity": "severe",
+            "exposureRoute": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "26643006",
+                  "display": "Oral route"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "AllergyIntolerance"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8bb68ec8-6dd6-41e4-96c6-5cb14718142f",
+      "resource": {
+        "resourceType": "Goal",
+        "lifecycleStatus": "active",
+        "achievementStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/goal-achievement",
+              "code": "in-progress",
+              "display": "In Progress"
+            }
+          ]
+        },
+        "description": {
+          "text": "Hemoglobin A1c below 7.0%"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "startDate": "2026-10-15",
+        "target": [
+          {
+            "measure": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "4548-4",
+                  "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
+                }
+              ]
+            },
+            "detailQuantity": {
+              "comparator": "<",
+              "value": 7.0,
+              "unit": "%",
+              "system": "http://unitsofmeasure.org",
+              "code": "%"
+            },
+            "dueDate": "2027-04-15"
+          }
+        ],
+        "addresses": [
+          {
+            "reference": "urn:uuid:ecf94623-2cc0-429d-b79d-cf9bce1c81f8",
+            "display": "Type 2 diabetes mellitus"
+          }
+        ],
+        "expressedBy": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Goal"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:29e57d41-239c-426f-82de-fab2cfae7b5b",
+      "resource": {
+        "resourceType": "Goal",
+        "lifecycleStatus": "active",
+        "achievementStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/goal-achievement",
+              "code": "in-progress",
+              "display": "In Progress"
+            }
+          ]
+        },
+        "description": {
+          "text": "Blood pressure below 130/80 mmHg"
+        },
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "startDate": "2026-10-15",
+        "target": [
+          {
+            "measure": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8480-6",
+                  "display": "Systolic blood pressure"
+                }
+              ]
+            },
+            "detailQuantity": {
+              "comparator": "<",
+              "value": 130,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            },
+            "dueDate": "2027-01-15"
+          },
+          {
+            "measure": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8462-4",
+                  "display": "Diastolic blood pressure"
+                }
+              ]
+            },
+            "detailQuantity": {
+              "comparator": "<",
+              "value": 80,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            },
+            "dueDate": "2027-01-15"
+          }
+        ],
+        "addresses": [
+          {
+            "reference": "urn:uuid:5bcba524-2adc-424b-8b90-2a5ccef49b2a",
+            "display": "Essential hypertension"
+          }
+        ],
+        "expressedBy": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Goal"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:68409a84-6de5-4ef5-bf8a-5d3a1ee78253",
+      "resource": {
+        "resourceType": "CarePlan",
+        "text": {
+          "status": "generated",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p><b>Diabetes and Hypertension Management Plan</b></p><p>Continue metformin and lisinopril, repeat HbA1c in 3 months, home BP monitoring, nutrition counseling and 150 min/week of moderate exercise.</p></div>"
+        },
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ]
+          }
+        ],
+        "title": "Diabetes and Hypertension Management Plan",
+        "description": "Plan to improve glycemic and blood pressure control following the October 2026 follow-up visit.",
+        "subject": {
+          "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+          "display": "Maria Elena Rodriguez"
+        },
+        "encounter": {
+          "reference": "urn:uuid:f2702398-37a6-4f17-b019-e6110dd18342"
+        },
+        "period": {
+          "start": "2026-10-15",
+          "end": "2027-10-15"
+        },
+        "created": "2026-10-15T10:15:00-05:00",
+        "author": {
+          "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+          "display": "Dr. James Chen, MD"
+        },
+        "addresses": [
+          {
+            "reference": "urn:uuid:ecf94623-2cc0-429d-b79d-cf9bce1c81f8",
+            "display": "Type 2 diabetes mellitus"
+          },
+          {
+            "reference": "urn:uuid:5bcba524-2adc-424b-8b90-2a5ccef49b2a",
+            "display": "Essential hypertension"
+          }
+        ],
+        "supportingInfo": [
+          {
+            "reference": "urn:uuid:fdcaa327-3a4b-4586-aba4-9804edc6513e",
+            "display": "Hemoglobin A1c 7.8%"
+          },
+          {
+            "reference": "urn:uuid:df139d7d-7cd6-4305-8a84-95bef0378e6a",
+            "display": "Blood pressure 142/88"
+          },
+          {
+            "reference": "urn:uuid:b3af225b-5401-49d2-9606-462bdc73920d",
+            "display": "BMI 32.5"
+          }
+        ],
+        "goal": [
+          {
+            "reference": "urn:uuid:8bb68ec8-6dd6-41e4-96c6-5cb14718142f",
+            "display": "HbA1c < 7.0%"
+          },
+          {
+            "reference": "urn:uuid:29e57d41-239c-426f-82de-fab2cfae7b5b",
+            "display": "BP < 130/80"
+          }
+        ],
+        "activity": [
+          {
+            "reference": {
+              "reference": "urn:uuid:5c5b10bb-1244-4bff-b1d5-8e00bc0346ca",
+              "display": "Metformin 500 mg twice daily"
+            }
+          },
+          {
+            "reference": {
+              "reference": "urn:uuid:ca85e228-51f0-441e-9a86-9ffff9c47a11",
+              "display": "Lisinopril 10 mg once daily"
+            }
+          },
+          {
+            "detail": {
+              "kind": "ServiceRequest",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://loinc.org",
+                    "code": "4548-4",
+                    "display": "Hemoglobin A1c/Hemoglobin.total in Blood"
+                  }
+                ]
+              },
+              "status": "scheduled",
+              "description": "Repeat HbA1c in 3 months",
+              "scheduledPeriod": {
+                "start": "2027-01-11",
+                "end": "2027-01-22"
+              },
+              "performer": [
+                {
+                  "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+                  "display": "Dr. James Chen, MD"
+                }
+              ]
+            }
+          },
+          {
+            "detail": {
+              "kind": "Task",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "135840009",
+                    "display": "Blood pressure monitoring"
+                  }
+                ]
+              },
+              "status": "in-progress",
+              "description": "Check home blood pressure each morning and log readings; bring log to next visit",
+              "scheduledTiming": {
+                "repeat": {
+                  "frequency": 1,
+                  "period": 1,
+                  "periodUnit": "d"
+                }
+              },
+              "performer": [
+                {
+                  "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+                  "display": "Maria Elena Rodriguez"
+                }
+              ]
+            }
+          },
+          {
+            "detail": {
+              "kind": "ServiceRequest",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "11816003",
+                    "display": "Diet education"
+                  }
+                ]
+              },
+              "status": "scheduled",
+              "description": "Referral to registered dietitian for carbohydrate-controlled, low-sodium diet",
+              "scheduledPeriod": {
+                "start": "2026-11-02",
+                "end": "2026-11-30"
+              }
+            }
+          },
+          {
+            "detail": {
+              "kind": "Task",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "229065009",
+                    "display": "Exercise therapy"
+                  }
+                ]
+              },
+              "status": "in-progress",
+              "description": "Moderate-intensity aerobic activity (e.g., brisk walking) at least 150 minutes per week",
+              "scheduledTiming": {
+                "repeat": {
+                  "frequency": 5,
+                  "period": 1,
+                  "periodUnit": "wk",
+                  "duration": 30,
+                  "durationUnit": "min"
+                }
+              },
+              "performer": [
+                {
+                  "reference": "urn:uuid:e81352d2-4099-49bc-a7cf-41745b5617ce",
+                  "display": "Maria Elena Rodriguez"
+                }
+              ]
+            }
+          },
+          {
+            "detail": {
+              "kind": "Appointment",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "390906007",
+                    "display": "Follow-up encounter"
+                  }
+                ]
+              },
+              "status": "scheduled",
+              "description": "Follow-up visit with primary care in 3 months",
+              "scheduledString": "Week of 2027-01-18",
+              "performer": [
+                {
+                  "reference": "urn:uuid:9f284fb6-4beb-43e4-9e77-270bf6eeba0a",
+                  "display": "Dr. James Chen, MD"
+                }
+              ]
+            }
+          }
+        ],
+        "note": [
+          {
+            "text": "Patient prefers Spanish-language education materials."
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "CarePlan"
+      }
+    }
+  ]
+}
