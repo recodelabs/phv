@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod canon;
 pub mod check;
 pub mod error;
