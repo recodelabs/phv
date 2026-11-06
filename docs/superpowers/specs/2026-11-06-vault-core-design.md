@@ -51,13 +51,13 @@ Without Git, a vault has no history and no undo. The person's confirmation befor
 `phv setup` is an interactive walkthrough that creates one person's vault. Running it again adds another family member. It reads answers from stdin, so it also works with piped input.
 
 1. Ask for a short vault name, such as `maya`. Names use lowercase letters, numbers, `-` and `_`, and must not already be registered.
-2. Ask where to keep the vault, defaulting to `~/health-vaults/<name>`.
+2. Ask where to keep the vault, defaulting to `~/health-vaults/<name>`. The folder must be new or empty, so unrelated files can't be committed or pushed by mistake. The first commit stages only vault files.
 3. Create the vault and register it. The first vault registered becomes the default.
 4. Ask for the person's name and birth date, and add their `Patient`. This step can be skipped.
-5. If `git` is installed, ask whether to use it, defaulting to yes, then run `git init` and make a first commit. If `git` is not installed, say so and continue without it.
+5. If `git` is installed, ask whether to use it, defaulting to yes, then run `git init` and make a first commit. If `git` is not installed, say so and continue without it. If the first commit fails, say which commands fix it, and do not offer GitHub.
 6. If the vault uses Git and `gh` is installed and logged in, explain what GitHub can read, then ask whether to create a private repo, defaulting to no. The answer is asked for every vault. phv always passes `--private` and has no option to create a public repo. If `gh` is missing or logged out, say how to set it up later and continue.
 
-A failed Git or GitHub step reports the problem and leaves the local vault in place.
+A failed Git or GitHub step reports the problem and leaves the local vault in place. A setup interrupted partway leaves a working vault, and running setup again for that name says what is left to do, rather than only that the name exists.
 
 `phv vaults` lists registered vaults, and `phv use NAME` changes the default.
 
