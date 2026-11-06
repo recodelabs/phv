@@ -353,3 +353,76 @@ fn recorded_at_requires_source() {
     );
     assert!(!v.join("records/Patient.ndjson").exists());
 }
+
+fn named_patient(vault: &Path) {
+    let o = phv_stdin(
+        vault,
+        &["add", "-"],
+        r#"{"resourceType":"Patient","name":[{"family":"Example"}],"birthDate":"1980-01-01"}"#,
+    );
+    assert!(o.status.success(), "{o:?}");
+}
+
+#[test]
+fn ips_prints_a_document_and_changes_nothing() {
+    let (_d, v) = new_vault();
+    named_patient(&v);
+    let before = std::fs::read(v.join("records/Patient.ndjson")).unwrap();
+    let o = phv(&v, &["ips"]);
+    assert!(o.status.success(), "{o:?}");
+    let bundle: Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(bundle["type"], "document");
+    assert_eq!(
+        bundle["entry"][0]["resource"]["resourceType"],
+        "Composition"
+    );
+    assert_eq!(
+        before,
+        std::fs::read(v.join("records/Patient.ndjson")).unwrap()
+    );
+    assert_eq!(std::fs::read_dir(v.join("records")).unwrap().count(), 1);
+
+    let o = phv(&v, &["ips", "--json"]);
+    assert!(o.status.success(), "{o:?}");
+    let report: Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(report["bundle"]["type"], "document");
+    assert_eq!(report["omitted"], serde_json::json!([]));
+}
+
+#[test]
+fn ips_writes_a_private_file_outside_the_vault_only() {
+    let (d, v) = new_vault();
+    named_patient(&v);
+    let inside = v.join("ips.json");
+    let o = phv(&v, &["ips", "--out", inside.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert!(!inside.exists());
+    let nested = v.join("records/ips.json");
+    assert_eq!(
+        phv(&v, &["ips", "--out", nested.to_str().unwrap()])
+            .status
+            .code(),
+        Some(2)
+    );
+
+    let target = d.path().join("ips.json");
+    let o = phv(&v, &["ips", "--out", target.to_str().unwrap()]);
+    assert!(o.status.success(), "{o:?}");
+    assert_eq!(out(&o), "");
+    let bundle: Value = serde_json::from_slice(&std::fs::read(&target).unwrap()).unwrap();
+    assert_eq!(bundle["type"], "document");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode();
+        assert_eq!(mode & 0o077, 0, "only the user can read it");
+    }
+}
+
+#[test]
+fn ips_without_a_patient_exits_2() {
+    let (_d, v) = new_vault();
+    let o = phv(&v, &["ips"]);
+    assert_eq!(o.status.code(), Some(2), "{o:?}");
+    assert_eq!(out(&o), "");
+}

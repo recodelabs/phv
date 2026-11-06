@@ -137,6 +137,10 @@ History pages and "latest" tiles group records by a key: the LOINC code when the
 - Topic list pages show each record's status. Vaccines marked `not-done` show "Not given".
 - "Active now" on the Overview lists records with status `active`, `recurrence` or `relapse`, and records with no status, marked "Status not recorded". For conditions and allergies, this reads `clinicalStatus`, and a record whose `verificationStatus` is `refuted` is left out, though it stays on its topic page.
 
+### Age
+
+The Overview shows the person's age next to their birth date: days for a newborn, months up to 2 years, years and months up to 18, then years. A birth date with only a year or month gives "About 38 years", or nothing under 2 years, because it is too rough for a baby. No age is shown for someone recorded as deceased, or for a birth date in the future. The date is read in the route, in UTC, and passed into the model.
+
 ### Overview tiles
 
 There is one tile per measure, showing its newest record. Blood pressure, heart rate, body weight, height, temperature, oxygen saturation, respiratory rate and BMI come first, in that order, matched by LOINC code. Other vital measures follow by name.

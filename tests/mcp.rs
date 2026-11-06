@@ -129,6 +129,7 @@ fn it_lists_the_tools_and_offers_no_removal() {
             "add",
             "check",
             "get",
+            "ips",
             "list",
             "replace",
             "source_add",
@@ -494,4 +495,76 @@ fn an_agent_without_a_source_is_a_tool_error_and_writes_nothing() {
     assert_eq!(result["isError"], true, "{result}");
     assert!(!v.join("records/Observation.ndjson").exists());
     assert!(!v.join("records/Provenance.ndjson").exists());
+}
+
+#[test]
+fn ips_returns_the_same_document_as_the_cli() {
+    let (_d, v) = new_vault();
+    let result = one(
+        &v,
+        "add",
+        json!({"resource_json": r#"{"resourceType":"Patient","name":[{"family":"Example"}],"birthDate":"1980-01-01"}"#}),
+    );
+    assert_eq!(result["isError"], false, "{result}");
+    let result = one(&v, "ips", json!({}));
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(
+        result["content"].as_array().unwrap().len(),
+        1,
+        "nothing left out"
+    );
+    let from_mcp: Value = serde_json::from_str(&text(&result)).unwrap();
+
+    let o = Command::new(env!("CARGO_BIN_EXE_phv"))
+        .args(["--vault", v.to_str().unwrap(), "ips"])
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{o:?}");
+    let from_cli: Value = serde_json::from_slice(&o.stdout).unwrap();
+    // Everything but the clock: the entries after the Composition, and its sections.
+    let content = |b: &Value| {
+        let entries = b["entry"].as_array().unwrap();
+        (
+            entries[1..].to_vec(),
+            entries[0]["resource"]["section"].clone(),
+        )
+    };
+    assert_eq!(content(&from_mcp), content(&from_cli));
+}
+
+#[test]
+fn ips_lists_left_out_records_in_a_second_item() {
+    let (_d, v) = new_vault();
+    let result = one(
+        &v,
+        "add",
+        json!({"resource_json": r#"{"resourceType":"Patient","name":[{"family":"Example"}],"birthDate":"1980-01-01"}"#}),
+    );
+    let patient: Value = serde_json::from_str(&text(&result)).unwrap();
+    let patient = patient["created"][0].as_str().unwrap();
+    // A lab result with no performer fails the IPS profile.
+    let sodium = format!(
+        r#"{{"resourceType":"Observation","status":"final","category":[{{"coding":[{{"system":"http://terminology.hl7.org/CodeSystem/observation-category","code":"laboratory"}}]}}],"code":{{"text":"Sodium"}},"subject":{{"reference":"{patient}"}},"valueQuantity":{{"value":140,"unit":"mmol/L"}}}}"#
+    );
+    assert_eq!(
+        one(&v, "add", json!({"resource_json": sodium}))["isError"],
+        false
+    );
+    let result = one(&v, "ips", json!({}));
+    assert_eq!(result["isError"], false, "{result}");
+    let second = result["content"][1]["text"].as_str().unwrap();
+    assert!(
+        second.starts_with("warning: 1 record was left out"),
+        "{second}"
+    );
+    assert!(second.contains("performer"), "{second}");
+}
+
+#[test]
+fn ips_for_a_patient_without_a_name_is_a_tool_error() {
+    let (_d, v) = new_vault();
+    add_patient(&v);
+    let result = one(&v, "ips", json!({}));
+    assert_eq!(result["isError"], true, "{result}");
+    assert!(text(&result).contains("PHV-IPS-PATIENT"));
 }
