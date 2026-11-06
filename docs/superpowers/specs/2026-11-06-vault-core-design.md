@@ -318,3 +318,5 @@ These came from reviewing the design against the HealthKit export app in `health
 - **Other record rules:** skip and report DSTU2 records, which stay in `sources/`. Set an identifier (source, type, original ID) and `meta.source`.
 - **Activity:** one Observation per day for steps, probably LOINC 41950-7 (confirm the code), keyed on date. Workouts as Observation, keyed on the HealthKit UUID, which is a judgment call to confirm.
 - **Tests:** cover Coverage, MedicationRequest, MedicationDispense and Procedure.
+- **Seen so far:** Apple's simulator sample records are all DSTU2, so a fixture needs R4 records too, and no R4 from HealthKit has been seen yet. `sourceURL` looks like `<base>/<Type>/<id>` but may be null. All references are relative, to Patient, Encounter and Practitioner resources that are not in the export. Real hospital records are untested.
+- **File checks:** the last line of an export file is `kind: "summary"`, and a file without it was cut off, so the importer must refuse it. A repeat export can be byte-identical, which triggers the duplicate source warning.
